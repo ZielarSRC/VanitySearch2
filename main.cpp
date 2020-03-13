@@ -25,7 +25,7 @@
 #include "hash/sha512.h"
 #include "hash/sha256.h"
 
-#define RELEASE "1.17"
+#define RELEASE "1.17.2 BITCRACK MOD"
 
 using namespace std;
 
@@ -60,7 +60,19 @@ void printUsage() {
   printf(" -kp: Generate key pair\n");
   printf(" -rp privkey partialkeyfile: Reconstruct final private key(s) from partial key(s) info.\n");
   printf(" -sp startPubKey: Start the search with a pubKey (for private key splitting)\n");
-  printf(" -r rekey: Rekey interval in MegaKey, default is disabled\n");
+  //printf(" -r rekey: Rekey interval in MegaKey, default is disabled\n");
+  printf(" -r rekey: Rekey interval in MegaKey, cpu=1000 gpu=100000\n");
+  printf("\n");
+  printf(" --keyspace START \n");
+  printf("            START:END \n");
+  printf("            START:+COUNT \n");
+  printf("            :+COUNT \n");	
+  printf("            :END \n");
+  printf("            Where START, END, COUNT are in hex format\n");
+  //printf(" --stride N: Increment by N keys at a time\n");
+  printf(" --share M / N: Divide the keyspace into N equal shares, process the Mth share\n");
+  printf(" --continue sessfile: Save / load progress from specified file\n");
+  //printf(" --continue sessfile: Save progress from specified file\n");
   exit(0);
 
 }
@@ -114,6 +126,153 @@ void getInts(string name,vector<int> &tokens, const string &text, char sep) {
 
 }
 
+// ------------------------------------------------------------------------------------------
+
+void getKeySpace( const string &text, BITCRACK_PARAM * bc, Int& maxKey) {	
+	size_t start = 0, end = 0;	
+	string item;	
+	try {	
+		if((end = text.find(':', start)) != string::npos) {	
+			item = std::string(text.substr(start, end));	
+			start = end + 1;	
+		}	
+		else {	
+			item = std::string(text);	
+		}	
+		if (item.length() == 0) {	
+			bc->ksStart.SetInt32(1);	
+		}	
+		else if (item.length() > 64) {	
+			printf("[ERROR] keyspaceSTART: invalid privkey (64 length)\n");	
+			exit(-1);	
+		}	
+		else{	
+			item.insert(0, 64-item.length(), '0');	
+			for (int i = 0; i < 32; i++) {	
+				unsigned char my1ch = 0;	
+				sscanf(&item[2 * i], "%02X", &my1ch);	
+				bc->ksStart.SetByte(31 - i, my1ch);	
+			}	
+		}	
+		//printf("[keyspaceSTART] 0x%064s \n", bc->ksStart.GetBase16().c_str());	
+		if (start != 0 && (end = text.find('+', start)) != string::npos) {	
+			item = std::string(text.substr(end + 1));	
+			if (item.length() > 64 || item.length() == 0) {	
+				printf("[ERROR] keyspace__END: invalid privkey (64 length)\n");	
+				exit(-1);	
+			}	
+			item.insert(0, 64 - item.length(), '0');	
+			for (int i = 0; i < 32; i++) {	
+				unsigned char my1ch = 0;	
+				sscanf(&item[2 * i], "%02X", &my1ch);	
+				bc->ksFinish.SetByte(31 - i, my1ch);	
+			}	
+			bc->ksFinish.Add(&bc->ksStart);	
+		}	
+		else if (start != 0) {	
+			item = std::string(text.substr(start));	
+			if (item.length() > 64 || item.length() == 0) {	
+				printf("[ERROR] keyspace__END: invalid privkey (64 length)\n");	
+				exit(-1);	
+			}	
+			item.insert(0, 64 - item.length(), '0');	
+			for (int i = 0; i < 32; i++) {	
+				unsigned char my1ch = 0;	
+				sscanf(&item[2 * i], "%02X", &my1ch);	
+				bc->ksFinish.SetByte(31 - i, my1ch);	
+			}	
+		}	
+		else {	
+			bc->ksFinish.Set(&maxKey);	
+		}	
+		//printf("[keyspace__END] 0x%064s \n", bc->ksFinish.GetBase16().c_str());	
+	}	
+	catch (std::invalid_argument &) {	
+		printf("[ERROR] Invalid --keyspace argument \n");	
+		exit(-1);	
+	}	
+}	
+// ------------------------------------------------------------------------------------------	
+void checkKeySpace(BITCRACK_PARAM * bc, Int& maxKey) {	
+	if (bc->ksStart.IsGreater(&maxKey) || bc->ksFinish.IsGreater(&maxKey)) {	
+		printf("[ERROR] START/END IsGreater %064s \n", maxKey.GetBase16().c_str());	
+		exit(-1);	
+	}	
+	if (bc->ksFinish.IsLowerOrEqual(&bc->ksStart)) {	
+		printf("[ERROR] END IsLowerOrEqual START \n");	
+		exit(-1);	
+	}	
+	if (bc->ksFinish.IsLowerOrEqual(&bc->ksNext)) {	
+		printf("[ERROR] END: IsLowerOrEqual NEXT \n");	
+		exit(-1);	
+	}	
+	return;	
+}	
+// ------------------------------------------------------------------------------------------	
+void getShare(const string &text, int *shareM, int *shareN) {	
+	size_t start = 0, end = 0;	
+	string item;	
+	try {	
+		if ((end = text.find('/', start)) != string::npos) {	
+			*shareM = std::stoi(text.substr(start, end));	
+			start = end + 1;	
+			*shareN = std::stoi(text.substr(start));	
+		}	
+		else {	
+			printf("[ERROR] Invalid --share M/N argument \n");	
+			exit(-1);	
+		}	
+		if(*shareM <= 0 || *shareN <= 0 || *shareM > *shareN ) {	
+			printf("[ERROR] Invalid --share argument, need M<=N and M>0 and N>0 \n");	
+			exit(-1);	
+		}	
+		//printf("[share#M/N] %i/%i \n", *shareM, *shareN);	
+	}	
+	catch (std::invalid_argument &) {	
+		printf("[ERROR] Invalid --share argument \n");	
+		exit(-1);	
+	}	
+}	
+// ------------------------------------------------------------------------------------------
+
+void loadProgress(string fileName, BITCRACK_PARAM * bc) {
+	if (fileName.length() > 0) {
+		FILE *fp;
+		fp = fopen(fileName.c_str(), "r");
+		if (fp != NULL) {
+			printf("LOADING from sessfile '%s' \n", fileName.c_str());
+			char f_buf[100];
+			string f_str;
+			size_t f_start = 0, f_end = 0;
+			while (!feof(fp)) {
+				if (fgets(f_buf, 99, fp)) {
+					//printf("%s", f_buf);
+					f_str = f_buf;
+					//printf("%s", f_str.c_str());
+					if ((f_end = f_str.find("start=", f_start)) != string::npos) {
+						f_str = std::string(f_str.substr(f_end + 6, 64));
+						//printf("[load][start=%s]\n", f_str.c_str());
+						bc->ksStart.SetBase16((char *)f_str.c_str());
+					}
+					if ((f_end = f_str.find("next=", f_start)) != string::npos) {
+						f_str = std::string(f_str.substr(f_end + 5, 64));
+						//printf("[load][next_=%s]\n", f_str.c_str());
+						bc->ksNext.SetBase16((char *)f_str.c_str());
+					}
+					if ((f_end = f_str.find("end=", f_start)) != string::npos) {
+						f_str = std::string(f_str.substr(f_end + 4, 64));
+						//printf("[load][end__=%s]\n", f_str.c_str());
+						bc->ksFinish.SetBase16((char *)f_str.c_str());
+					}
+				}
+			}
+			printf("LOADED start=%064s \n", bc->ksStart.GetBase16().c_str());
+			printf("LOADED  next=%064s \n", bc->ksNext.GetBase16().c_str());
+			printf("LOADED   end=%064s \n", bc->ksFinish.GetBase16().c_str());
+			fclose(fp);
+		}
+	}
+}	
 // ------------------------------------------------------------------------------------------
 
 void parseFile(string fileName, vector<string> &lines) {
@@ -226,7 +385,7 @@ void outputAdd(string outputFile, int addrType, string addr, string pAddr, strin
     fprintf(f, "Priv (WIF): p2wpkh:%s\n", pAddr.c_str());
     break;
   }
-  fprintf(f, "Priv (HEX): 0x%s\n", pAddrHex.c_str());
+  fprintf(f, "Priv (HEX): 0x%064s\n", pAddrHex.c_str());
 
   if (needToClose)
     fclose(f);
@@ -393,12 +552,26 @@ int main(int argc, char* argv[]) {
   bool tSpecified = false;
   bool sse = true;
   uint32_t maxFound = 65536;
-  uint64_t rekey = 0;
+  uint64_t rekey = 1000;
   Point startPuKey;
   startPuKey.Clear();
   bool startPubKeyCompressed;
   bool caseSensitive = true;
   bool paranoiacSeed = false;
+
+  string sessFile = "";//"_session.txt";
+
+  Int maxKey;
+  maxKey.SetBase16("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140");
+  
+  BITCRACK_PARAM bitcrack, *bc;
+  bc = &bitcrack;
+  bc->ksStart.SetInt32(1);
+  bc->ksNext.Set(&bc->ksStart);
+  bc->ksFinish.Set(&maxKey);
+  bc->shareM = 1;
+  bc->shareN = 1;
+
 
   while (a < argc) {
 
@@ -426,7 +599,7 @@ int main(int argc, char* argv[]) {
 #ifdef WITHGPU
       if (gridSize.size() == 0) {
         gridSize.push_back(-1);
-        gridSize.push_back(128);
+        gridSize.push_back(256);
       }
       GPUEngine g(gridSize[0],gridSize[1],gpuId[0],maxFound,false);
       g.SetSearchMode(searchMode);
@@ -514,7 +687,21 @@ int main(int argc, char* argv[]) {
       a++;
       rekey = (uint64_t)getInt("rekey", argv[a]);
       a++;
-    } else if (strcmp(argv[a], "-h") == 0) {
+    } else if (strcmp(argv[a], "--continue") == 0) {
+      a++;
+      sessFile = string(argv[a]);
+      a++;
+    } else if (strcmp(argv[a], "--keyspace") == 0) {
+		a++;
+		getKeySpace(string(argv[a]), bc, maxKey);
+		bc->ksNext.Set(&bc->ksStart);
+		checkKeySpace(bc, maxKey);
+		a++;
+	} else if (strcmp(argv[a], "--share") == 0) {
+		a++;
+		getShare(string(argv[a]), &bc->shareM, &bc->shareN);
+		a++;
+	} else if (strcmp(argv[a], "-h") == 0) {
       printUsage();
     } else if (a == argc - 1) {
       prefix.push_back(string(argv[a]));
@@ -531,7 +718,7 @@ int main(int argc, char* argv[]) {
   if(gridSize.size()==0) {
     for (int i = 0; i < gpuId.size(); i++) {
       gridSize.push_back(-1);
-      gridSize.push_back(128);
+      gridSize.push_back(256);
     }
   } else if(gridSize.size() != gpuId.size()*2) {
     printf("Invalid gridSize or gpuId argument, must have coherent size\n");
@@ -545,13 +732,54 @@ int main(int argc, char* argv[]) {
   if(nbCPUThread<0)
     nbCPUThread = 0;
 
+//if (gpuEnable) nbCPUThread = 0;
+  if (rekey == 0) rekey = 1000;
+  if (gpuEnable && rekey <= 100000) rekey = 100000;
+
+
   // If a starting public key is specified, force the search mode according to the key
   if (!startPuKey.isZero()) {
     searchMode = (startPubKeyCompressed)?SEARCH_COMPRESSED:SEARCH_UNCOMPRESSED;
   }
 
+  //Share to keyspace - apply before load progress
+
+  if(bc->shareN > 1){
+	  //printf("[share][before] start=%064s\n", bc->ksStart.GetBase16().c_str());
+	  //printf("[share][before]   end=%064s\n", bc->ksFinish.GetBase16().c_str());
+
+	  Int shareRange;
+	  shareRange.Sub(&bc->ksFinish,&bc->ksStart);
+	  Int BNshareN;
+	  BNshareN.SetInt32((uint32_t)bc->shareN);
+	  Int share1Key;
+	  share1Key.Set(&shareRange);
+	  share1Key.Div(&BNshareN);
+	  share1Key.AddOne();
+	  for (int i = 1; i < bc->shareM; i++) {
+		  bc->ksStart.Add(&share1Key);
+	  }
+	  bc->ksFinish.Set(&bc->ksStart);
+	  bc->ksFinish.Add(&share1Key);
+
+	  bc->ksNext.Set(&bc->ksStart);
+
+	  printf("SHARE %i/%i \n", bc->shareM, bc->shareN);
+
+	  //printf("[share][after_] start=%064s\n", bc->ksStart.GetBase16().c_str());
+	  //printf("[share][after_]   end=%064s\n", bc->ksFinish.GetBase16().c_str());
+  }
+
+  //Try load progress from sessfile
+
+  loadProgress(sessFile, bc);
+  checkKeySpace(bc, maxKey);
+
+  printf("KEYSPACE start=%064s\n", bc->ksStart.GetBase16().c_str());
+  printf("KEYSPACE   end=%064s\n", bc->ksFinish.GetBase16().c_str());
+
   VanitySearch *v = new VanitySearch(secp, prefix, seed, searchMode, gpuEnable, stop, outputFile, sse,
-    maxFound, rekey, caseSensitive, startPuKey, paranoiacSeed);
+    maxFound, rekey, caseSensitive, startPuKey, paranoiacSeed, sessFile, bc);
   v->Search(nbCPUThread,gpuId,gridSize);
 
   return 0;
