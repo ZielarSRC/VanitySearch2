@@ -479,7 +479,8 @@ bool GPUEngine::callKernel() {
       comp_keys_pattern << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
         (searchMode, inputPrefix, inputKey, maxFound, outputPrefix);
     } else {
-      if (searchMode == SEARCH_COMPRESSED) {
+    // if (searchMode == SEARCH_COMPRESSED) {
+        if (0) {
         comp_keys_comp << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
           (inputPrefix, inputPrefixLookUp, inputKey, maxFound, outputPrefix);
       } else {
@@ -617,7 +618,11 @@ bool GPUEngine::CheckHash(uint8_t *h, vector<ITEM>& found,int tid,int incr,int e
   } else {
     ok = false;
     printf("Expected item not found %s (thread=%d, incr=%d, endo=%d)\n",
-      toHex(h, 20).c_str(),tid,incr,endo);
+      toHex(h, 20).c_str(),tid,incr,endo)
+		if (found[l].hash != NULL)
+		printf("%s\n", toHex(found[l].hash, 20).c_str());
+	else
+		printf("NULL\n");
   }
 
   return ok;
@@ -737,7 +742,7 @@ bool GPUEngine::Check(Secp256K1 *secp) {
   double t0 = Timer::get_tick();
   Launch(found,true);
   double t1 = Timer::get_tick();
-  Timer::printResult((char *)"Key", 6*STEP_SIZE*nbThread, t0, t1);
+  Timer::printResult((char *)"Key", 1*STEP_SIZE*nbThread, t0, t1);
    
   //for (int i = 0; i < found.size(); i++) {
   //  printf("[%d]: thId=%d incr=%d\n", i, found[i].thId,found[i].incr);
@@ -746,20 +751,20 @@ bool GPUEngine::Check(Secp256K1 *secp) {
   
   printf("ComputeKeys() found %d items , CPU check...\n",(int)found.size());
 
-  Int beta,beta2;
-  beta.SetBase16((char *)"7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee");
-  beta2.SetBase16((char *)"851695d49a83f8ef919bb86153cbcb16630fb68aed0a766a3ec693d68e6afa40");
+  // Int beta,beta2;
+  // beta.SetBase16((char *)"7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee");
+  // beta2.SetBase16((char *)"851695d49a83f8ef919bb86153cbcb16630fb68aed0a766a3ec693d68e6afa40");
 
   // Check with CPU
   for (j = 0; (j<nbThread); j++) {
     for (i = 0; i < STEP_SIZE; i++) {
       
-      Point pt,p1,p2;
+      Point pt; //,p1,p2;
       pt = p[j];
-      p1 = p[j];
-      p2 = p[j];
-      p1.x.ModMulK1(&beta);
-      p2.x.ModMulK1(&beta2);
+	//p1 = p[j];
+    //p2 = p[j];
+    //p1.x.ModMulK1(&beta);
+    //p2.x.ModMulK1(&beta2);
       p[j] = secp->NextKey(p[j]);
 
       // Point and endo
@@ -769,6 +774,7 @@ bool GPUEngine::Check(Secp256K1 *secp) {
 	      nbFoundCPU[0]++;
         ok &= CheckHash(h,found, j, i, 0, nbOK + 0);
       }
+		/*
       secp->GetHash160(P2PKH, searchComp, p1, h);
       pr = *(prefix_t *)h;
       if (pr == 0xFEFE || pr == 0x1234) {
@@ -805,7 +811,7 @@ bool GPUEngine::Check(Secp256K1 *secp) {
         nbFoundCPU[5]++;
         ok &= CheckHash(h, found, j, -i, 2, nbOK + 5);
       }
-
+		*/
     }
   }
 
@@ -821,13 +827,14 @@ bool GPUEngine::Check(Secp256K1 *secp) {
     printf("CPU found %d items\n",nbF); 
 
     printf("GPU: point   correct [%d/%d]\n", nbOK[0] , nbFoundCPU[0]);
+	  /*
     printf("GPU: endo #1 correct [%d/%d]\n", nbOK[1] , nbFoundCPU[1]);
     printf("GPU: endo #2 correct [%d/%d]\n", nbOK[2] , nbFoundCPU[2]);
 
     printf("GPU: sym/point   correct [%d/%d]\n", nbOK[3] , nbFoundCPU[3]);
     printf("GPU: sym/endo #1 correct [%d/%d]\n", nbOK[4] , nbFoundCPU[4]);
     printf("GPU: sym/endo #2 correct [%d/%d]\n", nbOK[5] , nbFoundCPU[5]);
-
+	  */
     printf("GPU/CPU check Failed !\n");
 
   }
@@ -835,6 +842,7 @@ bool GPUEngine::Check(Secp256K1 *secp) {
   if(ok) printf("GPU/CPU check OK\n");
 
   delete[] p;
+  delete[] p2;
   return ok;
 
 }
