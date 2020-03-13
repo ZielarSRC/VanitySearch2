@@ -40,6 +40,7 @@ typedef struct {
   int  gridSizeX;
   int  gridSizeY;
   int  gpuId;
+  Int  THnextKey;
 
 } TH_PARAM;
 
@@ -66,13 +67,23 @@ typedef struct {
 
 } PREFIX_TABLE_ITEM;
 
+typedef struct {
+
+	Int  ksStart;
+	Int  ksNext;
+	Int  ksFinish;
+	int  shareM;
+    int  shareN;
+
+} BITCRACK_PARAM;
+
 class VanitySearch {
 
 public:
 
   VanitySearch(Secp256K1 *secp, std::vector<std::string> &prefix, std::string seed, int searchMode, 
                bool useGpu,bool stop,std::string outputFile, bool useSSE,uint32_t maxFound,uint64_t rekey,
-               bool caseSensitive,Point &startPubKey,bool paranoiacSeed);
+               bool caseSensitive,Point &startPubKey,bool paranoiacSeed, std::string sessFile, BITCRACK_PARAM *bc);
 
   void Search(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize);
   void FindKeyCPU(TH_PARAM *p);
@@ -82,6 +93,7 @@ private:
 
   std::string GetHex(std::vector<unsigned char> &buffer);
   std::string GetExpectedTime(double keyRate, double keyCount);
+  std::string GetExpectedTimeBitCrack(double keyRate, double keyCount, BITCRACK_PARAM * bc);
   bool checkPrivKey(std::string addr, Int &key, int32_t incr, int endomorphism, bool mode);
   void checkAddr(int prefIdx, uint8_t *hash160, Int &key, int32_t incr, int endomorphism, bool mode);
   void checkAddrSSE(uint8_t *h1, uint8_t *h2, uint8_t *h3, uint8_t *h4, 
@@ -100,16 +112,18 @@ private:
   void dumpPrefixes();
   double getDiffuclty();
   void updateFound();
-  void getCPUStartingKey(int thId, Int& key, Point& startP);
-  void getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p);
+  void getCPUStartingKey(int thId, Int& key, Point& startP, uint64_t *tasksize, Int& THnextKey);
+  void getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p, uint64_t *tasksize, Int& THnextKey);
   void enumCaseUnsentivePrefix(std::string s, std::vector<std::string> &list);
   bool prefixMatch(char *prefix, char *addr);
 
   Secp256K1 *secp;
   Int startKey;
+  Int IncrStartKey;
   Point startPubKey;
   bool startPubKeySpecified;
   uint64_t counters[256];
+  uint64_t task_counters[256];
   double startTime;
   int searchType;
   int searchMode;
@@ -134,6 +148,10 @@ private:
   std::vector<prefix_t> usedPrefix;
   std::vector<LPREFIX> usedPrefixL;
   std::vector<std::string> &inputPrefixes;
+  
+  std::string sessFile;	
+  BITCRACK_PARAM *bc;	
+  void saveProgress(TH_PARAM *p, Int& lastSaveKey, BITCRACK_PARAM *bc);
 
   Int beta;
   Int lambda;
@@ -142,8 +160,10 @@ private:
 
 #ifdef WIN64
   HANDLE ghMutex;
+  HANDLE ghMutex_IncrStartKey;
 #else
   pthread_mutex_t  ghMutex;
+  pthread_mutex_t  ghMutex_IncrStartKey;
 #endif
 
 };

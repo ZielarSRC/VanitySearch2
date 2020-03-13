@@ -40,7 +40,8 @@ Point _2Gn;
 
 VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,string seed,int searchMode, 
                            bool useGpu, bool stop, string outputFile, bool useSSE, uint32_t maxFound,
-                           uint64_t rekey, bool caseSensitive, Point &startPubKey, bool paranoiacSeed)
+                           uint64_t rekey, bool caseSensitive, Point &startPubKey, bool paranoiacSeed,
+                           string sessFile, BITCRACK_PARAM *bc)
   :inputPrefixes(inputPrefixes) {
 
   this->secp = secp;
@@ -57,6 +58,9 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   this->hasPattern = false;
   this->caseSensitive = caseSensitive;
   this->startPubKeySpecified = !startPubKey.isZero();
+  
+  this->sessFile = sessFile;
+  this->bc = bc;
 
   lastRekey = 0;
   prefixes.clear();
@@ -305,16 +309,38 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
     2048);
   startKey.SetInt32(0);
   sha256(hseed, 64, (unsigned char *)startKey.bits64);
+  
+  //set startKey from seed	
+  if (0) {	
+	  if (seed.length() > 64 || seed.length() == 0) {	
+		  printf("StartKey: invalid privkey (64 length)\n");	
+		  exit(-1);	
+	  }	
+	  seed.insert(0, 64 - seed.length(), '0');	
+	  for (int i = 0; i < 32; i++) {	
+		  unsigned char my1ch = 0;	
+		  sscanf(&seed[2 * i], "%02X", &my1ch);	
+		  startKey.SetByte(31 - i, my1ch);	
+	  }	
+  }	
+  if (1) {	
+	  //startKey.Set(&bc->ksStart);	
+	  startKey.Set(&bc->ksNext);	
+  }	
+  IncrStartKey.Set(&startKey);	
 
   char *ctimeBuff;
   time_t now = time(NULL);
   ctimeBuff = ctime(&now);
   printf("Start %s", ctimeBuff);
 
-  if (rekey > 0) {
-    printf("Base Key: Randomly changed every %.0f Mkeys\n",(double)rekey);
-  } else {
-    printf("Base Key: %s\n", startKey.GetBase16().c_str());
+//  if (rekey > 0) {
+//    printf("Base Key: Randomly changed every %.0f Mkeys\n",(double)rekey);
+//  } else {
+//    printf("Base Key: %s\n", startKey.GetBase16().c_str());
+
+    if (sessFile.length() > 0) {
+	  printf("Save progress to '%s' every 60sec and +%.0f Mkeys\n", sessFile.c_str(), (double)rekey);
   }
 
 }
@@ -666,6 +692,91 @@ string VanitySearch::GetExpectedTime(double keyRate,double keyCount) {
 
 // ----------------------------------------------------------------------------
 
+string VanitySearch::GetExpectedTimeBitCrack(double keyRate, double keyCount, BITCRACK_PARAM * bc) {
+	char tmp[128];
+	string ret;
+	double dTime, nbDay, nbYear;
+	int iTime, nbHour, nbMin, nbSec;
+	if (hasPattern)
+		return "";
+	//dTime = (double)keyCount / keyRate;
+	dTime = Timer::get_tick() - startTime;
+	nbDay = dTime / 86400.0;
+	if (nbDay >= 1) {
+		nbYear = nbDay / 365.0;
+		if (nbYear > 1) {
+			if (nbYear < 5)
+				sprintf(tmp, "[%.1fy", nbYear);
+			else
+				sprintf(tmp, "[%gy", nbYear);
+		}
+		else {
+			sprintf(tmp, "[%.1fd", nbDay);
+		}
+	}
+	else {
+		iTime = (int)dTime;
+		nbHour = (int)((iTime % 86400) / 3600);
+		nbMin = (int)(((iTime % 86400) % 3600) / 60);
+		nbSec = (int)(iTime % 60);
+		sprintf(tmp, "[%02d:%02d:%02d", nbHour, nbMin, nbSec);
+	}
+	ret = string(tmp);
+	sprintf(tmp, "UPTIME | ETA:");
+	ret = ret + string(tmp);
+	Int Range;
+	//Range.Sub(&bc->ksFinish,&bc->ksStart);
+	Range.Sub(&bc->ksFinish, &bc->ksNext);
+	Int countKey;
+	countKey.SetInt32(0);
+	countKey.Add((uint64_t)keyCount);
+	Int rateKey;
+	rateKey.SetInt32(0);
+	rateKey.Add((uint64_t)keyRate);
+	if (Range.IsGreaterOrEqual(&countKey)) {
+		Int leftKey;
+		leftKey.Sub(&Range, &countKey);
+		leftKey.Div(&rateKey);
+		Int maxuint32;
+		maxuint32.SetInt32(4294967295);
+		uint32_t diffTime = 4294967295;
+		if (leftKey.IsLower(&maxuint32)) diffTime = leftKey.GetInt32();
+		if (diffTime == 4294967295) {
+			sprintf(tmp, "infinity]");
+		}
+		else {
+			dTime = (double)diffTime;
+			nbDay = dTime / 86400.0;
+			if (nbDay >= 1) {
+				nbYear = nbDay / 365.0;
+				if (nbYear > 1) {
+					if (nbYear < 5)
+						sprintf(tmp, "%.1fy]", nbYear);
+					else
+						sprintf(tmp, "%gy]", nbYear);
+				}
+				else {
+					sprintf(tmp, "%.1fd]", nbDay);
+				}
+			}
+			else {
+				iTime = (int)dTime;
+				nbHour = (int)((iTime % 86400) / 3600);
+				nbMin = (int)(((iTime % 86400) % 3600) / 60);
+				nbSec = (int)(iTime % 60);
+				sprintf(tmp, "%02d:%02d:%02d]", nbHour, nbMin, nbSec);
+			}
+		}
+	}
+	else{
+		sprintf(tmp, "FINAL TASKS...PLEASE WAIT...]");
+	}
+	ret = ret + string(tmp);
+	return ret;
+}
+
+// ----------------------------------------------------------------------------
+
 void VanitySearch::output(string addr,string pAddr,string pAddrHex) {
 
 #ifdef WIN64
@@ -709,7 +820,7 @@ void VanitySearch::output(string addr,string pAddr,string pAddrHex) {
       fprintf(f, "Priv (WIF): p2wpkh:%s\n", pAddr.c_str());
       break;
     }
-    fprintf(f, "Priv (HEX): 0x%s\n", pAddrHex.c_str());
+    fprintf(f, "Priv (HEX): 0x%064s\n", pAddrHex.c_str());
 
   }
 
@@ -1006,7 +1117,7 @@ void VanitySearch::checkAddresses(bool compressed, Int key, int i, Point p1) {
   prefix_t pr0 = *(prefix_t *)h0;
   if (hasPattern || prefixes[pr0].items)
     checkAddr(pr0, h0, key, i, 0, compressed);
-
+  /*
   // Endomorphism #1
   pte1[0].x.ModMulK1(&p1.x, &beta);
   pte1[0].y.Set(&p1.y);
@@ -1052,7 +1163,7 @@ void VanitySearch::checkAddresses(bool compressed, Int key, int i, Point p1) {
   pr0 = *(prefix_t *)h0;
   if (hasPattern || prefixes[pr0].items)
     checkAddr(pr0, h0, key, -i, 2, compressed);
-
+  */
 }
 
 // ----------------------------------------------------------------------------
@@ -1094,7 +1205,7 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
     checkAddrSSE(h0,h1,h2,h3,i,i+1,i+2,i+3,key,0,compressed);
 
   }
-
+  /*
   // Endomorphism #1
   // if (x, y) = k * G, then (beta*x, y) = lambda*k*G
   pte1[0].x.ModMulK1(&p1.x, &beta);
@@ -1259,14 +1370,38 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
     checkAddrSSE(h0, h1, h2, h3, -i, -(i + 1), -(i + 2), -(i + 3), key, 2, compressed);
 
   }
-
+  */
 }
 
 // ----------------------------------------------------------------------------
-void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {
+void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP, uint64_t *tasksize, Int& THnextKey) {
+
+#ifdef WIN64	
+	WaitForSingleObject(ghMutex_IncrStartKey, INFINITE);
+#else
+	pthread_mutex_lock(&ghMutex_IncrStartKey);
+#endif
+	THnextKey.Set(&IncrStartKey);
+	IncrStartKey.Add(*tasksize);
+	//printf("\n[CPU#%u][rekey][tasksize#%llu] \n", thId, *tasksize);
+	//printf("[CPU#%u][startKey__now] 0x%064s + 0x%llX = \n", thId, THnextKey.GetBase16().c_str(), *tasksize);
+	//printf("[CPU#%u][startKey_next] 0x%064s \n", thId, IncrStartKey.GetBase16().c_str());
+#ifdef WIN64
+	ReleaseMutex(ghMutex_IncrStartKey);
+#else
+	pthread_mutex_unlock(&ghMutex_IncrStartKey);
+#endif
 
   if (rekey > 0) {
-    key.Rand(256);
+  //  key.Rand(256);
+  
+    key.Set(&THnextKey);
+	//Int off((uint64_t)thId);
+	//off.Mult((uint64_t)(*tasksize/nbCPUThread));
+	//key.Add(&off);
+	//key.Add(*tasksize);
+	//printf("\n[cpu-rekey][th#%i] 0x%064s \n", thId, key.GetBase16().c_str());
+    
   } else {
     key.Set(&startKey);
     Int off((int64_t)thId);
@@ -1286,14 +1421,18 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
   // Global init
   int thId = ph->threadId;
   counters[thId] = 0;
-
+  task_counters[thId] = 0;	
+  	
+  uint64_t tasksize = ((uint64_t)CPU_GRP_SIZE ) * (uint64_t)(((rekey * 1000000) / ((uint64_t)CPU_GRP_SIZE * (uint64_t)nbCPUThread * (nbGPUThread?10:1))) + 1);
+  //printf("\n[nbGPUThread=%u][useGpu=%u]\n", nbGPUThread, useGpu);
+  
   // CPU Thread
   IntGroup *grp = new IntGroup(CPU_GRP_SIZE/2+1);
 
   // Group Init
   Int  key;
   Point startP;
-  getCPUStartingKey(thId,key,startP);
+  getCPUStartingKey(thId,key,startP, &tasksize, ph->THnextKey);
 
   Int dx[CPU_GRP_SIZE/2+1];
   Point pts[CPU_GRP_SIZE];
@@ -1307,13 +1446,15 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
   grp->Set(dx);
 
   ph->hasStarted = true;
-  ph->rekeyRequest = false;
+  // ph->rekeyRequest = false;
 
   while (!endOfSearch) {
 
-    if (ph->rekeyRequest) {
-      getCPUStartingKey(thId, key, startP);
-      ph->rekeyRequest = false;
+  // if (ph->rekeyRequest) {
+      if (task_counters[thId] >= tasksize) {
+      getCPUStartingKey(thId, key, startP, &tasksize, ph->THnextKey);
+  //  ph->rekeyRequest = false;
+	  task_counters[thId] = 0;
     }
 
     // Fill group
@@ -1468,21 +1609,45 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
     }
 
     key.Add((uint64_t)CPU_GRP_SIZE);
-    counters[thId]+= 6*CPU_GRP_SIZE; // Point + endo #1 + endo #2 + Symetric point + endo #1 + endo #2
-
+  // counters[thId]+= 6*CPU_GRP_SIZE; // Point + endo #1 + endo #2 + Symetric point + endo #1 + endo #2
+      counters[thId] += 1*CPU_GRP_SIZE;
+      task_counters[thId] += 1*CPU_GRP_SIZE;
   }
 
   ph->isRunning = false;
 
+  delete grp;
 }
 
 // ----------------------------------------------------------------------------
 
-void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p) {
+void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int *keys, Point *p, uint64_t *tasksize, Int& THnextKey) {
+
+#ifdef WIN64
+	WaitForSingleObject(ghMutex_IncrStartKey, INFINITE);
+#else
+	pthread_mutex_lock(&ghMutex_IncrStartKey);
+#endif
+	THnextKey.Set(&IncrStartKey);
+	IncrStartKey.Add(*tasksize);
+	//printf("\n[GPU#%u][rekey][nbT#%u][tasksize#%llu] \n", thId-0x80L, nbThread, *tasksize);
+	//printf("[GPU#%u][startKey__now] 0x%064s + 0x%llX = \n", thId-0x80L, THnextKey.GetBase16().c_str(), *tasksize);
+	//printf("[GPU#%u][startKey_next] 0x%064s \n", thId-0x80L, IncrStartKey.GetBase16().c_str());
+#ifdef WIN64
+	ReleaseMutex(ghMutex_IncrStartKey);
+#else
+	pthread_mutex_unlock(&ghMutex_IncrStartKey);
+#endif
 
   for (int i = 0; i < nbThread; i++) {
     if (rekey > 0) {
-      keys[i].Rand(256);
+  //  keys[i].Rand(256);
+      keys[i].Set(&THnextKey);
+	  Int off((uint64_t)i);
+	  off.Mult((uint64_t)(*tasksize/nbThread));
+	  keys[i].Add(&off);
+	  //printf("\n[rekey][i#%u] 0x%064s \n", i, keys[i].GetBase16().c_str());
+      
     } else {
       keys[i].Set(&startKey);
       Int offT((uint64_t)i);
@@ -1492,9 +1657,12 @@ void VanitySearch::getGPUStartingKeys(int thId, int groupSize, int nbThread, Int
       keys[i].Add(&offT);
       keys[i].Add(&offG);
     }
-    Int k(keys + i);
+   // Int k(keys + i);
+      Int k(keys[i]);
+    
     // Starting key is at the middle of the group
     k.Add((uint64_t)(groupSize / 2));
+	//printf("\n[privkey][i#%u] 0x%064s \n", i, k.GetBase16().c_str());	
     p[i] = secp->ComputePublicKey(&k);
     if (startPubKeySpecified)
       p[i] = secp->AddDirect(p[i], startPubKey);
@@ -1519,8 +1687,11 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
   printf("GPU: %s\n",g.deviceName.c_str());
 
   counters[thId] = 0;
-
-  getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
+  task_counters[thId] = 0;	
+  uint64_t tasksize = ((uint64_t)STEP_SIZE * (uint64_t)nbThread) * (uint64_t)(((rekey * 1000000) / ((uint64_t)STEP_SIZE * (uint64_t)nbThread)) + 1);
+  
+  //getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p, &tasksize, ph->THnextKey);	
+  //getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p, &tasksize, ph->THnextKey);
 
   g.SetSearchMode(searchMode);
   g.SetSearchType(searchType);
@@ -1533,19 +1704,21 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
       g.SetPrefix(usedPrefix);
   }
 
-  getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
+  getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p, &tasksize, ph->THnextKey);
   ok = g.SetKeys(p);
-  ph->rekeyRequest = false;
+  // ph->rekeyRequest = false;
 
   ph->hasStarted = true;
 
   // GPU Thread
   while (ok && !endOfSearch) {
 
-    if (ph->rekeyRequest) {
-      getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p);
+//  if (ph->rekeyRequest) {
+	if(task_counters[thId] >= tasksize) {
+      getGPUStartingKeys(thId, g.GetGroupSize(), nbThread, keys, p, &tasksize, ph->THnextKey);
       ok = g.SetKeys(p);
-      ph->rekeyRequest = false;
+//    ph->rekeyRequest = false;
+		  task_counters[thId] = 0;
     }
 
     // Call kernel
@@ -1562,7 +1735,9 @@ void VanitySearch::FindKeyGPU(TH_PARAM *ph) {
       for (int i = 0; i < nbThread; i++) {
         keys[i].Add((uint64_t)STEP_SIZE);
       }
-      counters[thId] += 6ULL * STEP_SIZE * nbThread; // Point +  endo1 + endo2 + symetrics
+//     counters[thId] += 6ULL * STEP_SIZE * nbThread; // Point +  endo1 + endo2 + symetrics
+      counters[thId] += 1*STEP_SIZE * nbThread;
+	  task_counters[thId] += 1*STEP_SIZE * nbThread;
     }
 
   }
@@ -1638,6 +1813,38 @@ uint64_t VanitySearch::getCPUCount() {
 
 // ----------------------------------------------------------------------------
 
+void VanitySearch::saveProgress(TH_PARAM *p, Int& lastSaveKey, BITCRACK_PARAM *bc) {
+    
+	Int lowerKey;
+	lowerKey.Set(&p[0].THnextKey);
+
+	int total = nbCPUThread + nbGPUThread;
+	for (int i = 0; i < total; i++) {
+		if(p[i].THnextKey.IsLower(&lowerKey))
+			lowerKey.Set(&p[i].THnextKey);
+	}
+
+	if (lowerKey.IsLowerOrEqual(&lastSaveKey)) return;
+	lastSaveKey.Set(&lowerKey);
+
+	if (sessFile.length() > 0) {
+		printf("\n CheckPoint: 0x%064s \n", lowerKey.GetBase16().c_str());
+		FILE *fh;
+		fh = fopen(sessFile.c_str(), "w");
+		if (fh == NULL) {
+			printf("WARNING: Cannot open %s for writing\n", sessFile.c_str());
+		}
+		else {
+			fprintf(fh, "start=%064s\n", bc->ksStart.GetBase16().c_str());
+			fprintf(fh, "next=%064s\n", lowerKey.GetBase16().c_str());
+			fprintf(fh, "end=%064s\n", bc->ksFinish.GetBase16().c_str());
+			fclose(fh);
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------	
+
 void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize) {
 
   double t0;
@@ -1648,26 +1855,33 @@ void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> g
   nbFoundKey = 0;
 
   memset(counters,0,sizeof(counters));
+  memset(task_counters, 0, sizeof(task_counters));
 
   printf("Number of CPU thread: %d\n", nbCPUThread);
 
   TH_PARAM *params = (TH_PARAM *)malloc((nbCPUThread + nbGPUThread) * sizeof(TH_PARAM));
   memset(params,0,(nbCPUThread + nbGPUThread) * sizeof(TH_PARAM));
 
+#ifdef WIN64
+  ghMutex = CreateMutex(NULL, FALSE, NULL);
+  ghMutex_IncrStartKey = CreateMutex(NULL, FALSE, NULL);
+#else
+  ghMutex = PTHREAD_MUTEX_INITIALIZER;
+  ghMutex_IncrStartKey = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
   // Launch CPU threads
   for (int i = 0; i < nbCPUThread; i++) {
     params[i].obj = this;
     params[i].threadId = i;
     params[i].isRunning = true;
-
+    params[i].THnextKey.Set(&bc->ksNext);
 #ifdef WIN64
     DWORD thread_id;
     CreateThread(NULL, 0, _FindKey, (void*)(params+i), 0, &thread_id);
-    ghMutex = CreateMutex(NULL, FALSE, NULL);
 #else
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, &_FindKey, (void*)(params+i));  
-    ghMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
   }
 
@@ -1679,6 +1893,7 @@ void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> g
     params[nbCPUThread+i].gpuId = gpuId[i];
     params[nbCPUThread+i].gridSizeX = gridSize[2*i];
     params[nbCPUThread+i].gridSizeY = gridSize[2*i+1];
+    params[nbCPUThread+i].THnextKey.Set(&bc->ksNext);
 #ifdef WIN64
     DWORD thread_id;
     CreateThread(NULL, 0, _FindKeyGPU, (void*)(params+(nbCPUThread+i)), 0, &thread_id);
@@ -1695,6 +1910,9 @@ void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> g
   uint64_t lastCount = 0;
   uint64_t gpuCount = 0;
   uint64_t lastGPUCount = 0;
+  
+  double timeout60sec = 0;
+  Int lastSaveKey; lastSaveKey.SetInt32(0);
 
   // Key rate smoothing filter
   #define FILTER_SIZE 8
@@ -1748,16 +1966,34 @@ void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> g
     if (isAlive(params)) {
       printf("\r[%.2f Mkey/s][GPU %.2f Mkey/s][Total 2^%.2f]%s[Found %d]  ",
         avgKeyRate / 1000000.0, avgGpuKeyRate / 1000000.0,
-          log2((double)count), GetExpectedTime(avgKeyRate, (double)count).c_str(),nbFoundKey);
+          log2((double)count), 
+          //GetExpectedTime(avgKeyRate, (double)count).c_str(),
+            GetExpectedTimeBitCrack(avgKeyRate, (double)count, bc).c_str(),
+            nbFoundKey);
     }
 
-    if (rekey > 0) {
-      if ((count - lastRekey) > (1000000 * rekey)) {
+//    if (rekey > 0) {
+//      if ((count - lastRekey) > (1000000 * rekey)) {
         // Rekey request
-        rekeyRequest(params);
-        lastRekey = count;
-      }
-    }
+//        rekeyRequest(params);
+//        lastRekey = count;
+//      }
+//   }
+
+	timeout60sec += (t1 - t0);
+	if (timeout60sec > 60.0) {
+
+		//Save LowerPrivKey as saveProgress
+		saveProgress(params, lastSaveKey, bc);
+        
+		//Reached end of keyspace
+		if (lastSaveKey.IsGreaterOrEqual(&bc->ksFinish)) {
+			endOfSearch = true;
+			printf("Scan completed... Reached end of keyspace. \n");
+		}
+        
+		timeout60sec = 0.0;
+	}
 
     lastCount = count;
     lastGPUCount = gpuCount;
@@ -1766,7 +2002,12 @@ void VanitySearch::Search(int nbThread,std::vector<int> gpuId,std::vector<int> g
   }
 
   free(params);
-
+  free(patternFound);
+  
+  char *ctimeBuff;	
+  time_t now = time(NULL);	
+  ctimeBuff = ctime(&now);	
+  printf("Finish at %s", ctimeBuff);	
 }
 
 // ----------------------------------------------------------------------------
