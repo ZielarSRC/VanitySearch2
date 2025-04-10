@@ -16,8 +16,11 @@
 */
 
 // ---------------------------------------------------------------------------------
-// 256(+64) bits integer CUDA libray for SECPK1
+// 256(+64) bits integer CUDA library for SECPK1
 // ---------------------------------------------------------------------------------
+
+#ifndef GPU_MATH_H
+#define GPU_MATH_H
 
 // We need 1 extra block for ModInv
 #define NBBLOCK 5
@@ -42,9 +45,9 @@
 
 #define UMULLO(lo,a, b) asm volatile ("mul.lo.u64 %0, %1, %2;" : "=l"(lo) : "l"(a), "l"(b));
 #define UMULHI(hi,a, b) asm volatile ("mul.hi.u64 %0, %1, %2;" : "=l"(hi) : "l"(a), "l"(b));
-#define MADDO(r,a,b,c) asm volatile ("mad.hi.cc.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c) : "memory" );
-#define MADDC(r,a,b,c) asm volatile ("madc.hi.cc.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c) : "memory" );
-#define MADD(r,a,b,c) asm volatile ("madc.hi.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c));
+#define MADDO(r,a,b,c) asm volatile ("mad.lo.cc.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c) : "memory" );
+#define MADDC(r,a,b,c) asm volatile ("madc.lo.cc.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c) : "memory" );
+#define MADD(r,a,b,c) asm volatile ("madc.lo.u64 %0, %1, %2, %3;" : "=l"(r) : "l"(a), "l"(b), "l"(c));
 
 __device__ __constant__ uint64_t _0[] = { 0ULL,0ULL,0ULL,0ULL,0ULL };
 __device__ __constant__ uint64_t _1[] = { 1ULL,0ULL,0ULL,0ULL,0ULL };
@@ -512,6 +515,7 @@ __device__ void _ModMult(uint64_t *r, uint64_t *a, uint64_t *b) {
 
 }
 
+// ---------------------------------------------------------------------------------------
 
 __device__ void _ModMult(uint64_t *r, uint64_t *a) {
 
@@ -561,6 +565,8 @@ __device__ void _ModMult(uint64_t *r, uint64_t *a) {
 
 }
 
+// ---------------------------------------------------------------------------------------
+
 __device__ void _ModSqr(uint64_t *rp, const uint64_t *up) {
 
   uint64_t r512[8];
@@ -574,7 +580,6 @@ __device__ void _ModSqr(uint64_t *rp, const uint64_t *up) {
 
   uint64_t t1;
   uint64_t t2;
-
 
   //k=0
   UMULLO(r512[0], up[0], up[0]);
@@ -665,8 +670,6 @@ __device__ void _ModSqr(uint64_t *rp, const uint64_t *up) {
   //k=7
   r512[7] = r1;
 
-#if 1
-
   // Reduce from 512 to 320 
   UMULLO(r0, r512[4], 0x1000003D1ULL);
   UMULLO(r1, r512[5], 0x1000003D1ULL);
@@ -690,46 +693,6 @@ __device__ void _ModSqr(uint64_t *rp, const uint64_t *up) {
   UADDC(rp[1], r512[1], u11);
   UADDC(rp[2], r512[2], 0ULL);
   UADD(rp[3], r512[3], 0ULL);
-
-#else
-
-  uint64_t z1, z2, z3, z4, z5, z6, z7, z8;
-
-  UMULLO(z3, r512[5], 0x1000003d1ULL);
-  UMULHI(z4, r512[5], 0x1000003d1ULL);
-  UMULLO(z5, r512[6], 0x1000003d1ULL);
-  UMULHI(z6, r512[6], 0x1000003d1ULL);
-  UMULLO(z7, r512[7], 0x1000003d1ULL);
-  UMULHI(z8, r512[7], 0x1000003d1ULL);
-  UMULLO(z1, r512[4], 0x1000003d1ULL);
-  UMULHI(z2, r512[4], 0x1000003d1ULL);
-  UADDO1(z1, r512[0]);
-  UADD1(z2, 0x0ULL);
-
-
-  UADDO1(z2, r512[1]);
-  UADDC1(z4, r512[2]);
-  UADDC1(z6, r512[3]);
-  UADD1(z8, 0x0ULL);
-
-  UADDO1(z3, z2);
-  UADDC1(z5, z4);
-  UADDC1(z7, z6);
-  UADD1(z8, 0x0ULL);
-
-  UMULLO(u10, z8, 0x1000003d1ULL);
-  UMULHI(u11, z8, 0x1000003d1ULL);
-  UADDO1(z1, u10);
-  UADDC1(z3, u11);
-  UADDC1(z5, 0x0ULL);
-  UADD1(z7, 0x0ULL);
-
-  rp[0] = z1;
-  rp[1] = z3;
-  rp[2] = z5;
-  rp[3] = z7;
-
-#endif
 
 }
 
@@ -762,3 +725,5 @@ __device__ __noinline__ void _ModInvGrouped(uint64_t r[GRP_SIZE / 2 + 1][4]) {
   Load256(r[0], inverse);
 
 }
+
+#endif // GPU_MATH_H
