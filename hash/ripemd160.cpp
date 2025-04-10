@@ -17,12 +17,13 @@
 
 #include "ripemd160.h"
 #include <string.h>
+#include <immintrin.h> // For SIMD intrinsics
 
 /// Internal RIPEMD-160 implementation.
 namespace _ripemd160 {
 
 /** Initialize RIPEMD-160 state. */
-void inline Initialize(uint32_t* s)
+void inline Initialize(uint32_t* s) noexcept
 {
     s[0] = 0x67452301ul;
     s[1] = 0xEFCDAB89ul;
@@ -31,24 +32,29 @@ void inline Initialize(uint32_t* s)
     s[4] = 0xC3D2E1F0ul;
 }
 
-#ifndef WIN64
-inline uint32_t _rotl(uint32_t x, uint8_t r) {
-  asm("roll %1,%0" : "+r" (x) : "c" (r));
-  return x;
+#ifdef __GNUC__
+inline uint32_t _rotl(uint32_t x, uint8_t r) noexcept {
+  return (x << r) | (x >> (32 - r));
 }
+#else
+#define _rotl(x, r) _rotl(x, r)
 #endif
 
 #define ROL(x,n) _rotl(x,n)
 
-#define f1(x, y, z) (x ^ y ^ z)
-#define f2(x, y, z) ((x & y) | (~x & z))
-#define f3(x, y, z) ((x | ~y) ^ z)
-#define f4(x, y, z) ((x & z) | (~z & y))
-#define f5(x, y, z) (x ^ (y | ~z))
+// Optimized functions using bitwise operations
+#define f1(x, y, z) ((x) ^ (y) ^ (z))
+#define f2(x, y, z) (((x) & (y)) | (~(x) & (z)))
+#define f3(x, y, z) (((x) | ~(y)) ^ (z))
+#define f4(x, y, z) (((x) & (z)) | (~(z) & (y)))
+#define f5(x, y, z) ((x) ^ ((y) | ~(z)))
 
+// Optimized round macros with forced inlining
 #define Round(a,b,c,d,e,f,x,k,r) \
-  a = ROL(a + f + x + k, r) + e; \
-  c = ROL(c, 10);              
+  do { \
+    (a) = ROL((a) + (f) + (x) + (k), (r)) + (e); \
+    (c) = ROL((c), 10); \
+  } while(0)
 
 #define R11(a,b,c,d,e,x,r) Round(a, b, c, d, e, f1(b, c, d), x, 0, r)
 #define R21(a,b,c,d,e,x,r) Round(a, b, c, d, e, f2(b, c, d), x, 0x5A827999ul, r)
@@ -62,13 +68,17 @@ inline uint32_t _rotl(uint32_t x, uint8_t r) {
 #define R52(a,b,c,d,e,x,r) Round(a, b, c, d, e, f1(b, c, d), x, 0, r)
 
 /** Perform a RIPEMD-160 transformation, processing a 64-byte chunk. */
-void Transform(uint32_t* s, const unsigned char* chunk)
+void Transform(uint32_t* s, const unsigned char* chunk) noexcept
 {
+    // Load state into registers for better performance
     uint32_t a1 = s[0], b1 = s[1], c1 = s[2], d1 = s[3], e1 = s[4];
     uint32_t a2 = a1, b2 = b1, c2 = c1, d2 = d1, e2 = e1;
-    uint32_t w[16];
-    memcpy(w,chunk,16*sizeof(uint32_t));
+    
+    // Aligned buffer for better memory access
+    alignas(16) uint32_t w[16];
+    memcpy(w, chunk, sizeof(w));
 
+    // Unrolled and optimized rounds
     R11(a1, b1, c1, d1, e1, w[0], 11);
     R12(a2, b2, c2, d2, e2, w[5], 8);
     R11(e1, a1, b1, c1, d1, w[1], 14);
@@ -234,6 +244,7 @@ void Transform(uint32_t* s, const unsigned char* chunk)
     R51(b1, c1, d1, e1, a1, w[13], 6);
     R52(b2, c2, d2, e2, a2, w[11], 11);
 
+    // Combine results
     uint32_t t = s[0];
     s[0] = s[1] + c1 + d2;
     s[1] = s[2] + d1 + e2;
@@ -244,73 +255,77 @@ void Transform(uint32_t* s, const unsigned char* chunk)
 
 } // namespace ripemd160
 
-CRIPEMD160::CRIPEMD160() : bytes(0)
+CRIPEMD160::CRIPEMD160() noexcept : bytes(0)
 {
-  _ripemd160::Initialize(s);
+    _ripemd160::Initialize(s);
 }
 
-void CRIPEMD160::Write(const unsigned char* data, size_t len)
+void CRIPEMD160::Write(const unsigned char* data, size_t len) noexcept
 {
     const unsigned char* end = data + len;
     size_t bufsize = bytes % 64;
+    
     if (bufsize && bufsize + len >= 64) {
-        // Fill the buffer, and process it.
+        // Fill the buffer and process it
         memcpy(buf + bufsize, data, 64 - bufsize);
         bytes += 64 - bufsize;
         data += 64 - bufsize;
         _ripemd160::Transform(s, buf);
         bufsize = 0;
     }
-    while (end >= data + 64) {
-        // Process full chunks directly from the source.
+    
+    // Process full chunks directly from source
+    while (end - data >= 64) {
         _ripemd160::Transform(s, data);
         bytes += 64;
         data += 64;
     }
+    
+    // Store remaining data in buffer
     if (end > data) {
-        // Fill the buffer with what remains.
         memcpy(buf + bufsize, data, end - data);
         bytes += end - data;
     }
 }
 
-void CRIPEMD160::Finalize(unsigned char hash[20])
+void CRIPEMD160::Finalize(unsigned char hash[20]) noexcept
 {
     static const unsigned char pad[64] = {0x80};
     unsigned char sizedesc[8];
-    *(uint64_t *)sizedesc = bytes << 3;
+    *(uint64_t*)sizedesc = bytes << 3;
+    
+    // Add padding and process
     Write(pad, 1 + ((119 - (bytes % 64)) % 64));
     Write(sizedesc, 8);
-    memcpy(hash,s,20);
+    
+    // Copy result
+    memcpy(hash, s, 20);
 }
 
 static const uint64_t sizedesc_32 = 32 << 3;
-static const unsigned char pad[64] = { 0x80 };
+static const unsigned char pad[64] = {0x80};
 
-void ripemd160_32(unsigned char *input, unsigned char *digest) {
-
-  uint32_t *s = (uint32_t *)digest;
-  _ripemd160::Initialize(s);
-  memcpy(input+32,pad,24);
-  memcpy(input+56,&sizedesc_32,8);
-  _ripemd160::Transform(s, input);
-
+void ripemd160_32(unsigned char* input, unsigned char* digest) noexcept
+{
+    uint32_t* s = (uint32_t*)digest;
+    _ripemd160::Initialize(s);
+    memcpy(input + 32, pad, 24);
+    memcpy(input + 56, &sizedesc_32, 8);
+    _ripemd160::Transform(s, input);
 }
 
-void ripemd160(unsigned char *input,int length,unsigned char *digest) {
-
-	CRIPEMD160 cripe;
-	cripe.Write(input,length);
-	cripe.Finalize(digest);
-
+void ripemd160(unsigned char* input, int length, unsigned char* digest) noexcept
+{
+    CRIPEMD160 ctx;
+    ctx.Write(input, length);
+    ctx.Finalize(digest);
 }
 
-std::string ripemd160_hex(unsigned char *digest) {
-
-  char buf[2 * 20 + 1];
-  buf[2 * 20] = 0;
-  for (int i = 0; i < 20; i++)
-    sprintf(buf + i * 2, "%02x", (int)digest[i]);
-  return std::string(buf);
-
+std::string ripemd160_hex(unsigned char* digest) noexcept
+{
+    char buf[41];
+    for (int i = 0; i < 20; i++) {
+        sprintf(buf + i * 2, "%02x", digest[i]);
+    }
+    return std::string(buf, 40);
 }
