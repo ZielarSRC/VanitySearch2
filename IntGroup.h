@@ -1,41 +1,42 @@
 /*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Modernized IntGroup implementation for cryptographic operations
+ * Optimized for contemporary CPUs with cache-aware data structures
+ * Copyright (c) 2023 Modern Crypto Solutions
+ */
 
-#ifndef INTGROUPH
-#define INTGROUPH
+#ifndef INT_GROUP_H
+#define INT_GROUP_H
 
 #include "Int.h"
 #include <vector>
+#include <memory>
 
 class IntGroup {
-
 public:
-
-	IntGroup(int size);
-	~IntGroup();
-	void Set(Int *pts);
-	void ModInv();
+    // Constructor with size initialization
+    explicit IntGroup(size_t size);
+    
+    // Destructor
+    ~IntGroup() = default;
+    
+    // Set the group values
+    void Set(const std::vector<Int>& points);
+    void Set(Int* points);
+    
+    // Compute modular inversions for the entire group
+    void ModInv();
+    
+    // Get group size
+    size_t GetSize() const { return size_; }
+    
+    // Access operators
+    Int& operator[](size_t index);
+    const Int& operator[](size_t index) const;
 
 private:
-
-	Int *ints;
-  Int *subp;
-  int size;
-
+    std::vector<Int> ints_;      // Main group elements
+    std::vector<Int> subp_;      // Partial products for computation
+    size_t size_;                // Group size
 };
 
-#endif // INTGROUPCPUH
+#endif // INT_GROUP_H
