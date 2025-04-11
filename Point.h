@@ -1,46 +1,56 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#ifndef POINTH
-#define POINTH
-
+#pragma once
 #include "Int.h"
+#include <array>
+#include <functional>
+#include <stdexcept>
 
 class Point {
-
 public:
+    static constexpr size_t COMPRESSED_SIZE = 33;
+    static constexpr size_t UNCOMPRESSED_SIZE = 65;
+    static constexpr uint8_t COMPRESSED_EVEN = 0x02;
+    static constexpr uint8_t COMPRESSED_ODD = 0x03;
+    static constexpr uint8_t UNCOMPRESSED = 0x04;
+    
+    Point();
+    explicit Point(const Int& x, const Int& y, bool compressed = false);
+    explicit Point(const std::array<unsigned char, COMPRESSED_SIZE>& data);
+    explicit Point(const std::array<unsigned char, UNCOMPRESSED_SIZE>& data);
+    
+    bool parse(const unsigned char* data, size_t size);
+    void serialize(std::array<unsigned char, COMPRESSED_SIZE>& out) const;
+    void serialize(std::array<unsigned char, UNCOMPRESSED_SIZE>& out) const;
+    std::vector<unsigned char> serialize(bool forceUncompressed = false) const;
+    
+    bool isInfinity() const;
+    bool isValid() const;
+    bool operator==(const Point& other) const;
+    bool operator!=(const Point& other) const;
+    Point operator+(const Point& other) const;
+    Point& operator+=(const Point& other);
+    Point operator*(const Int& scalar) const;
+    Point& operator*=(const Int& scalar);
+    
+    Int getX() const { return x; }
+    Int getY() const { return y; }
+    bool isCompressed() const { return compressed; }
+    void setCompressed(bool val) { compressed = val; }
 
-  Point();
-  Point(Int *cx,Int *cy,Int *cz);
-  Point(Int *cx, Int *cz);
-  Point(const Point &p);
-  ~Point();
-  bool isZero();
-  bool equals(Point &p);
-  void Set(Point &p);
-  void Set(Int *cx, Int *cy,Int *cz);
-  void Clear();
-  void Reduce();
-  std::string toString();
+    static Point infinity();
+    static Point generator();
 
-  Int x;
-  Int y;
-  Int z;
-
+private:
+    Int x;
+    Int y;
+    bool compressed = false;
+    
+    void doublePoint();
+    void addPoint(const Point& other);
+    void multiply(const Int& scalar);
+    void checkOnCurve() const;
+    
+    static const Int P;
+    static const Int A;
+    static const Int B;
+    static const Point G;
 };
-
-#endif // POINTH
