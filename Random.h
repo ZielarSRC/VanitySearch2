@@ -1,25 +1,19 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+#pragma once
+#include "Int.h"
+#include <random>
+#include <array>
 
-#ifndef RANDOM_H
-#define RANDOM_H
-
-double rnd();
-unsigned long rndl();
-void rseed(unsigned long seed);
-
-#endif
+class Random {
+public:
+    static void init();
+    static Int getRandom();
+    static Int getRandomRange(const Int& range);
+    static void getRandomBytes(unsigned char* buf, size_t count);
+    
+private:
+    static std::random_device rd;
+    static std::mt19937_64 gen;
+    static std::uniform_int_distribution<uint64_t> dis;
+    
+    static void fillRandomBuffer(std::array<uint64_t, 4>& buffer);
+};
