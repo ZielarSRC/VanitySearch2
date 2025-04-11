@@ -1,35 +1,18 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#ifndef WILDCARDH
-#define WILDCARDH
-
+#pragma once
 #include <string>
+#include <vector>
+#include <regex>
 
 class Wildcard {
-
 public:
-  /**
-  * Checks whether a string matches a given wildcard pattern.
-  * Possible patterns allow to match single characters ('?') or any count of
-  * characters ('*')
-  */
-  static bool match(const char *str, const char *pattern,bool caseSensitive);
-
+    explicit Wildcard(const std::string& pattern);
+    
+    bool match(const std::string& input) const;
+    static bool isPattern(const std::string& str);
+    
+private:
+    std::regex regexPattern;
+    std::string originalPattern;
+    
+    static std::string convertToRegex(const std::string& wildcardPattern);
 };
-
-#endif // WILDCARDH
