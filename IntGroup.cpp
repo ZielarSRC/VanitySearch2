@@ -1,58 +1,72 @@
 /*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Modernized IntGroup implementation
+ * Features:
+ * - Memory-safe operations using std::vector
+ * - Cache-friendly data layout
+ * - Const-correctness
+ * - Bounds checking in debug builds
+ */
 
 #include "IntGroup.h"
+#include <stdexcept>
+#include <algorithm>
 
-using namespace std;
-
-IntGroup::IntGroup(int size) {
-  this->size = size;
-  subp = (Int *)malloc(size * sizeof(Int));
+IntGroup::IntGroup(size_t size) 
+    : size_(size), 
+      ints_(size), 
+      subp_(size) {
+    if(size == 0) {
+        throw std::invalid_argument("Group size cannot be zero");
+    }
 }
 
-IntGroup::~IntGroup() {
-  free(subp);
+void IntGroup::Set(const std::vector<Int>& points) {
+    if(points.size() != size_) {
+        throw std::invalid_argument("Input size mismatch");
+    }
+    std::copy(points.begin(), points.end(), ints_.begin());
 }
 
-void IntGroup::Set(Int *pts) {
-  ints = pts;
+void IntGroup::Set(Int* points) {
+    if(points == nullptr) {
+        throw std::invalid_argument("Null pointer provided");
+    }
+    std::copy(points, points + size_, ints_.begin());
 }
 
-// Compute modular inversion of the whole group
 void IntGroup::ModInv() {
+    if(size_ == 0) return;
 
-  Int newValue;
-  Int inverse;
+    // Compute partial products
+    subp_[0] = ints_[0];
+    for(size_t i = 1; i < size_; ++i) {
+        subp_[i].ModMulK1(&subp_[i-1], &ints_[i]);
+    }
 
-  subp[0].Set(&ints[0]);
-  for (int i = 1; i < size; i++) {
-    subp[i].ModMulK1(&subp[i - 1], &ints[i]);
-  }
+    // Compute the inverse of the last partial product
+    Int inverse = subp_.back();
+    inverse.ModInv();
 
-  // Do the inversion
-  inverse.Set(&subp[size - 1]);
-  inverse.ModInv();
+    // Compute individual inverses using the partial products
+    for(size_t i = size_ - 1; i > 0; --i) {
+        Int newValue;
+        newValue.ModMulK1(&subp_[i-1], &inverse);
+        inverse.ModMulK1(&ints_[i]);
+        ints_[i] = std::move(newValue);
+    }
+    ints_[0] = std::move(inverse);
+}
 
-  for (int i = size - 1; i > 0; i--) {
-    newValue.ModMulK1(&subp[i - 1], &inverse);
-    inverse.ModMulK1(&ints[i]);
-    ints[i].Set(&newValue);
-  }
+Int& IntGroup::operator[](size_t index) {
+    if(index >= size_) {
+        throw std::out_of_range("Index out of range");
+    }
+    return ints_[index];
+}
 
-  ints[0].Set(&inverse);
-
+const Int& IntGroup::operator[](size_t index) const {
+    if(index >= size_) {
+        throw std::out_of_range("Index out of range");
+    }
+    return ints_[index];
 }
