@@ -3,19 +3,7 @@
  * Copyright (c) 2019 Jean Luc PONS.
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#include "Int.h"
+ * it under the terms of th#include "Int.h"
 #include "IntGroup.h"
 #include <string.h>
 #include <emmintrin.h>
@@ -25,7 +13,6 @@
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 Int _ONE(1);
-
 
 // ------------------------------------------------
 
@@ -51,30 +38,23 @@ Int::Int(int64_t i64) {
 // ------------------------------------------------
 
 void Int::CLEAR() {
-
   memset(bits64,0, NB64BLOCK*8);
-
 }
 
 void Int::CLEARFF() {
-
   memset(bits64, 0xFF, NB64BLOCK * 8);
-
 }
 
 // ------------------------------------------------
 
 void Int::Set(Int *a) {
-
   for (int i = 0; i<NB64BLOCK; i++)
   	bits64[i] = a->bits64[i];
-
 }
 
 // ------------------------------------------------
 
 void Int::Add(Int *a) {
-
   unsigned char c = 0;
   c = _addcarry_u64(c, bits64[0], a->bits64[0], bits64 +0);
   c = _addcarry_u64(c, bits64[1], a->bits64[1], bits64 +1);
@@ -87,13 +67,11 @@ void Int::Add(Int *a) {
   c = _addcarry_u64(c, bits64[7], a->bits64[7], bits64 +7);
   c = _addcarry_u64(c, bits64[8], a->bits64[8], bits64 +8);
 #endif
-
 }
 
 // ------------------------------------------------
 
 void Int::Add(uint64_t a) {
-
 	unsigned char c = 0;
 	c = _addcarry_u64(c, bits64[0], a, bits64 + 0);
 	c = _addcarry_u64(c, bits64[1], 0, bits64 + 1);
@@ -110,7 +88,6 @@ void Int::Add(uint64_t a) {
 
 // ------------------------------------------------
 void Int::AddOne() {
-
   unsigned char c = 0;
   c = _addcarry_u64(c, bits64[0],1, bits64 +0);
   c = _addcarry_u64(c, bits64[1],0, bits64 +1);
@@ -123,13 +100,11 @@ void Int::AddOne() {
   c = _addcarry_u64(c, bits64[7],0, bits64 +7);
   c = _addcarry_u64(c, bits64[8],0, bits64 +8);
 #endif
-
 }
 
 // ------------------------------------------------
 
 void Int::Add(Int *a,Int *b) {
-
   unsigned char c = 0;
   c = _addcarry_u64(c, b->bits64[0], a->bits64[0], bits64 +0);
   c = _addcarry_u64(c, b->bits64[1], a->bits64[1], bits64 +1);
@@ -142,85 +117,67 @@ void Int::Add(Int *a,Int *b) {
   c = _addcarry_u64(c, b->bits64[7], a->bits64[7], bits64 +7);
   c = _addcarry_u64(c, b->bits64[8], a->bits64[8], bits64 +8);
 #endif
-
 }
 
 // ------------------------------------------------
 
 bool Int::IsGreater(Int *a) {
-
   int i;
-
   for(i=NB64BLOCK-1;i>=0;) {
     if( a->bits64[i]!= bits64[i] )
 		break;
     i--;
   }
-
   if(i>=0) {
     return bits64[i]>a->bits64[i];
   } else {
     return false;
   }
-
 }
 
 // ------------------------------------------------
 
 bool Int::IsLower(Int *a) {
-
   int i;
-
   for (i = NB64BLOCK - 1; i >= 0;) {
     if (a->bits64[i] != bits64[i])
       break;
     i--;
   }
-
   if (i >= 0) {
     return bits64[i]<a->bits64[i];
   } else {
     return false;
   }
-
 }
 
 // ------------------------------------------------
 
 bool Int::IsGreaterOrEqual(Int *a) {
-
   Int p;
   p.Sub(this,a);
   return p.IsPositive();
-
 }
 
 // ------------------------------------------------
 
 bool Int::IsLowerOrEqual(Int *a) {
-
   int i = NB64BLOCK - 1;
-
   while (i >= 0) {
     if (a->bits64[i] != bits64[i])
       break;
     i--;
-}
-
+  }
   if (i >= 0) {
     return bits64[i]<a->bits64[i];
   } else {
     return true;
   }
-
 }
 
 bool Int::IsEqual(Int *a) {
-
-return
-
 #if NB64BLOCK > 5
-  (bits64[8] == a->bits64[8]) &&
+  return (bits64[8] == a->bits64[8]) &&
   (bits64[7] == a->bits64[7]) &&
   (bits64[6] == a->bits64[6]) &&
   (bits64[5] == a->bits64[5]) &&
@@ -230,7 +187,6 @@ return
   (bits64[2] == a->bits64[2]) &&
   (bits64[1] == a->bits64[1]) &&
   (bits64[0] == a->bits64[0]);
-
 }
 
 bool Int::IsOne() {
@@ -238,23 +194,18 @@ bool Int::IsOne() {
 }
 
 bool Int::IsZero() {
-
 #if NB64BLOCK > 5
   return (bits64[8] | bits64[7] | bits64[6] | bits64[5] | bits64[4] | bits64[3] | bits64[2] | bits64[1] | bits64[0]) == 0;
 #else
   return (bits64[4] | bits64[3] | bits64[2] | bits64[1] | bits64[0]) == 0;
 #endif
-
 }
-
 
 // ------------------------------------------------
 
 void Int::SetInt32(uint32_t value) {
-
   CLEAR();
   bits[0]=value;
-
 }
 
 // ------------------------------------------------
@@ -266,40 +217,32 @@ uint32_t Int::GetInt32() {
 // ------------------------------------------------
 
 unsigned char Int::GetByte(int n) {
-  
   unsigned char *bbPtr = (unsigned char *)bits;
   return bbPtr[n];
-
 }
 
 void Int::Set32Bytes(unsigned char *bytes) {
-
   CLEAR();
   uint64_t *ptr = (uint64_t *)bytes;
   bits64[3] = _byteswap_uint64(ptr[0]);
   bits64[2] = _byteswap_uint64(ptr[1]);
   bits64[1] = _byteswap_uint64(ptr[2]);
   bits64[0] = _byteswap_uint64(ptr[3]);
-
 }
 
 void Int::Get32Bytes(unsigned char *buff) {
-
   uint64_t *ptr = (uint64_t *)buff;
   ptr[3] = _byteswap_uint64(bits64[0]);
   ptr[2] = _byteswap_uint64(bits64[1]);
   ptr[1] = _byteswap_uint64(bits64[2]);
   ptr[0] = _byteswap_uint64(bits64[3]);
-
 }
 
 // ------------------------------------------------
 
 void Int::SetByte(int n,unsigned char byte) {
-
 	unsigned char *bbPtr = (unsigned char *)bits;
 	bbPtr[n] = byte;
-
 }
 
 // ------------------------------------------------
@@ -317,7 +260,6 @@ void Int::SetQWord(int n, uint64_t b) {
 // ------------------------------------------------
 
 void Int::Sub(Int *a) {
-
   unsigned char c = 0;
   c = _subborrow_u64(c, bits64[0], a->bits64[0], bits64 +0);
   c = _subborrow_u64(c, bits64[1], a->bits64[1], bits64 +1);
@@ -330,13 +272,11 @@ void Int::Sub(Int *a) {
   c = _subborrow_u64(c, bits64[7], a->bits64[7], bits64 +7);
   c = _subborrow_u64(c, bits64[8], a->bits64[8], bits64 +8);
 #endif
-
 }
 
 // ------------------------------------------------
 
 void Int::Sub(Int *a,Int *b) {
-
   unsigned char c = 0;
   c = _subborrow_u64(c, a->bits64[0], b->bits64[0], bits64 + 0);
   c = _subborrow_u64(c, a->bits64[1], b->bits64[1], bits64 + 1);
@@ -349,11 +289,9 @@ void Int::Sub(Int *a,Int *b) {
   c = _subborrow_u64(c, a->bits64[7], b->bits64[7], bits64 + 7);
   c = _subborrow_u64(c, a->bits64[8], b->bits64[8], bits64 + 8);
 #endif
-
 }
 
 void Int::Sub(uint64_t a) {
-
   unsigned char c = 0;
   c = _subborrow_u64(c, bits64[0], a, bits64 + 0);
   c = _subborrow_u64(c, bits64[1], 0, bits64 + 1);
@@ -366,11 +304,9 @@ void Int::Sub(uint64_t a) {
   c = _subborrow_u64(c, bits64[7], 0, bits64 + 7);
   c = _subborrow_u64(c, bits64[8], 0, bits64 + 8);
 #endif
-
 }
 
 void Int::SubOne() {
-
   unsigned char c = 0;
   c = _subborrow_u64(c, bits64[0], 1, bits64 + 0);
   c = _subborrow_u64(c, bits64[1], 0, bits64 + 1);
@@ -383,7 +319,6 @@ void Int::SubOne() {
   c = _subborrow_u64(c, bits64[7], 0, bits64 + 7);
   c = _subborrow_u64(c, bits64[8], 0, bits64 + 8);
 #endif
-
 }
 
 // ------------------------------------------------
@@ -422,7 +357,6 @@ bool Int::IsOdd() {
 // ------------------------------------------------
 
 void Int::Neg() {
-
 	volatile unsigned char c=0;
 	c = _subborrow_u64(c, 0, bits64[0], bits64 + 0);
 	c = _subborrow_u64(c, 0, bits64[1], bits64 + 1);
@@ -435,52 +369,42 @@ void Int::Neg() {
 	c = _subborrow_u64(c, 0, bits64[7], bits64 + 7);
 	c = _subborrow_u64(c, 0, bits64[8], bits64 + 8);
 #endif
-
 }
 
 // ------------------------------------------------
 
 void Int::ShiftL32Bit() {
-
   for(int i=NB32BLOCK-1;i>0;i--) {
     bits[i]=bits[i-1];
   }
   bits[0]=0;
-
 }
 
 // ------------------------------------------------
 
 void Int::ShiftL64Bit() {
-
 	for (int i = NB64BLOCK-1 ; i>0; i--) {
 		bits64[i] = bits64[i - 1];
 	}
 	bits64[0] = 0;
-
 }
 
 // ------------------------------------------------
 
 void Int::ShiftL32BitAndSub(Int *a,int n) {
-
   Int b;
   int i=NB32BLOCK-1;
-
   for(;i>=n;i--)
     b.bits[i] = ~a->bits[i-n];
   for(;i>=0;i--)
     b.bits[i] = 0xFFFFFFFF;
-
   Add(&b);
   AddOne();
-
 }
 
 // ------------------------------------------------
 
-void Int::ShiftL(uint32_t n) {
-    
+void Int::ShiftL(uint32_t n) {    
   if( n<64 ) {
 	shiftL((unsigned char)n, bits64);
   } else {
@@ -488,14 +412,12 @@ void Int::ShiftL(uint32_t n) {
     uint32_t nb   = n%64;
     for(uint32_t i=0;i<nb64;i++) ShiftL64Bit();
 	  shiftL((unsigned char)nb, bits64);
-  }
-  
+  }  
 }
 
 // ------------------------------------------------
 
 void Int::ShiftR32Bit() {
-
   for(int i=0;i<NB32BLOCK-1;i++) {
     bits[i]=bits[i+1];
   }
@@ -503,13 +425,11 @@ void Int::ShiftR32Bit() {
     bits[NB32BLOCK-1] = 0xFFFFFFFF;
   else
     bits[NB32BLOCK-1]=0;
-
 }
 
 // ------------------------------------------------
 
 void Int::ShiftR64Bit() {
-
 	for (int i = 0; i<NB64BLOCK - 1; i++) {
 		bits64[i] = bits64[i + 1];
 	}
@@ -517,13 +437,11 @@ void Int::ShiftR64Bit() {
 		bits64[NB64BLOCK - 1] = 0xFFFFFFFFFFFFFFFF;
 	else
 		bits64[NB64BLOCK - 1] = 0;
-
 }
 
-// ---------------------------------D---------------
+// ------------------------------------------------
 
-void Int::ShiftR(uint32_t n) {
-    
+void Int::ShiftR(uint32_t n) {    
   if( n<64 ) {
     shiftR((unsigned char)n, bits64);
   } else {
@@ -531,67 +449,52 @@ void Int::ShiftR(uint32_t n) {
     uint32_t nb   = n%64;
     for(uint32_t i=0;i<nb64;i++) ShiftR64Bit();
 	  shiftR((unsigned char)nb, bits64);
-  }
-  
+  }  
 }
 
 // ------------------------------------------------
 
 void Int::Mult(Int *a) {
-
   Int b(this);
   Mult(a,&b);
-
 }
 
 // ------------------------------------------------
 
 void Int::IMult(int64_t a) {
-
-	// Make a positive
 	if (a < 0LL) {
 		a = -a;
 		Neg();
 	}
-
 	imm_mul(bits64, a, bits64);
-
 }
 
 // ------------------------------------------------
 
 void Int::Mult(uint64_t a) {
-
 	imm_mul(bits64, a, bits64);
-
 }
+
 // ------------------------------------------------
 
-void Int::IMult(Int *a, int64_t b) {
-  
+void Int::IMult(Int *a, int64_t b) {  
   Set(a);
-
-  // Make b positive
   if (b < 0LL) {
 	Neg();
 	b = -b;
   }
   imm_mul(bits64, b, bits64);
-
 }
 
 // ------------------------------------------------
 
 void Int::Mult(Int *a, uint64_t b) {
-
   imm_mul(a->bits64, b, bits64);
-
 }
 
 // ------------------------------------------------
 
-void Int::Mult(Int *a,Int *b) {
-  
+void Int::Mult(Int *a,Int *b) {  
   unsigned char c = 0;
   uint64_t h;
   uint64_t pr = 0;
@@ -611,7 +514,6 @@ void Int::Mult(Int *a,Int *b) {
     carryl = carryh;
     carryh = 0;
   }
-
 }
 
 // ------------------------------------------------
@@ -622,8 +524,7 @@ void Int::Mult(Int *a,uint32_t b) {
 
 // ------------------------------------------------
 
-static uint32_t bitLength(uint32_t dw) {
-  
+static uint32_t bitLength(uint32_t dw) {  
   uint32_t mask = 0x80000000;
   uint32_t b=0;
   while(b<32 && (mask & dw)==0) {
@@ -631,90 +532,72 @@ static uint32_t bitLength(uint32_t dw) {
     mask >>= 1;
   }
   return b;
-
 }
 
 // ------------------------------------------------
 
 int Int::GetBitLength() {
-
   Int t(this);
   if(IsNegative())
 	  t.Neg();
-
   int i=NB32BLOCK-1;
   while(i>=0 && t.bits[i]==0) i--;
   if(i<0) return 0;
   return (32-bitLength(t.bits[i])) + i*32;
-
 }
 
 // ------------------------------------------------
 
 int Int::GetSize() {
-
   int i=NB32BLOCK-1;
   while(i>0 && bits[i]==0) i--;
   return i+1;
-
 }
 
 // ------------------------------------------------
 
 void Int::MultModN(Int *a,Int *b,Int *n) {
-
   Int r;
   Mult(a,b);
   Div(n,&r);
   Set(&r);
-
 }
 
 // ------------------------------------------------
 
 void Int::Mod(Int *n) {
-
   Int r;
   Div(n,&r);
   Set(&r);
-
 }
 
 // ------------------------------------------------
 
 int Int::GetLowestBit() {
-
   // Assume this!=0
   int b=0;
   while(GetBit(b)==0) b++;
   return b;
-
 }
 
 // ------------------------------------------------
 
 void Int::MaskByte(int n) {
-
   for (int i = n; i < NB32BLOCK; i++)
 	  bits[i] = 0;
-
 }
 
 // ------------------------------------------------
 
 void Int::Abs() {
-
   if (IsNegative())
     Neg();
-
 }
 
 // ------------------------------------------------
 
 void Int::Rand(int nbit) {
-
 	CLEAR();
-
 	uint32_t nb = nbit/32;
 	uint32_t leftBit = nbit%32;
 	uint32_t mask = 1;
@@ -723,13 +606,11 @@ void Int::Rand(int nbit) {
 	for(;i<nb;i++)
 		bits[i]=rndl();
 	bits[i]=rndl()&mask;
-
 }
 
 // ------------------------------------------------
 
 void Int::Div(Int *a,Int *mod) {
-
   if(a->IsGreater(this)) {
     if(mod) mod->Set(this);
     CLEAR();
@@ -748,7 +629,6 @@ void Int::Div(Int *a,Int *mod) {
   }
 
   //Division algorithm D (Knuth section 4.3.1)
-
   Int rem(this);
   Int d(a);
   Int dq;
@@ -795,7 +675,6 @@ void Int::Div(Int *a,Int *mod) {
       continue;
 
     if (!skipCorrection) { 
-
       // Correct qhat
       uint64_t nl = (uint64_t)rem.bits[sb-j-1];
       uint64_t rs = ((uint64_t)qrem << 32) | nl;
@@ -811,7 +690,6 @@ void Int::Div(Int *a,Int *mod) {
             qhat--;
         }
       }
-
     }
 
     // D4 Multiply and subtract    
@@ -824,7 +702,6 @@ void Int::Div(Int *a,Int *mod) {
     }
 
     bits[qSize-j-1] = qhat;
-
  }
 
  if( mod ) {
@@ -832,13 +709,11 @@ void Int::Div(Int *a,Int *mod) {
    rem.ShiftR(shift);
    mod->Set(&rem);
  }
-
 }
 
 // ------------------------------------------------
 
 void Int::GCD(Int *a) {
-
     uint32_t k;
     uint32_t b;
 
@@ -872,7 +747,6 @@ void Int::GCD(Int *a) {
     }
 
     do {
-
       if( T.IsNegative() ) {
         T.Neg();
         b=0;while(T.GetBit(b)==0) b++;
@@ -884,21 +758,17 @@ void Int::GCD(Int *a) {
         T.ShiftR(b);
         U.Set(&T);
       }
-
       T.Sub(&V);
-
     } while (!T.IsZero());
 
     // Store gcd
     Set(&U);
     ShiftL(k); 
-
 }
 
 // ------------------------------------------------
 
 void Int::SetBase10(char *value) {  
-
   CLEAR();
   Int pw(1);
   Int c;
@@ -910,7 +780,6 @@ void Int::SetBase10(char *value) {
     Add(&c);
     pw.Mult(10);
   }
-
 }
 
 // ------------------------------------------------
@@ -934,7 +803,6 @@ std::string Int::GetBase16() {
 // ------------------------------------------------
 
 std::string Int::GetBlockStr() {
-	
 	char tmp[256];
 	char bStr[256];
 	tmp[0] = 0;
@@ -949,7 +817,6 @@ std::string Int::GetBlockStr() {
 // ------------------------------------------------
 
 std::string Int::GetC64Str(int nbDigit) {
-
   char tmp[256];
   char bStr[256];
   tmp[0] = '{';
@@ -974,9 +841,7 @@ std::string Int::GetC64Str(int nbDigit) {
 // ------------------------------------------------
 
 void  Int::SetBaseN(int n,char *charset,char *value) {
-
   CLEAR();
-
   Int pw((uint32_t)1);
   Int nb((int32_t)n);
   Int c;
@@ -993,22 +858,17 @@ void  Int::SetBaseN(int n,char *charset,char *value) {
     c.Mult(&pw);
     Add(&c);
     pw.Mult(&nb);
-
   }
-
 }
 
 // ------------------------------------------------
 
 std::string Int::GetBaseN(int n,char *charset) {
-
   std::string ret;
-
   Int N(this);
   int isNegative = N.IsNegative();
   if (isNegative) N.Neg();
 
-  // TODO: compute max digit
   unsigned char digits[1024];
   memset(digits, 0, sizeof(digits));
 
@@ -1026,7 +886,6 @@ std::string Int::GetBaseN(int n,char *charset) {
     }
   }
 
-  // reverse
   if (isNegative)
     ret.push_back('-');
 
@@ -1037,25 +896,20 @@ std::string Int::GetBaseN(int n,char *charset) {
     ret.push_back('0');
 
   return ret;
-
 }
 
 // ------------------------------------------------
 
-
 int Int::GetBit(uint32_t n) {
-
   uint32_t byte = n>>5;
   uint32_t bit  = n&31;
   uint32_t mask = 1 << bit;
   return (bits[byte] & mask)!=0;
-
 }
 
 // ------------------------------------------------
 
 std::string Int::GetBase2() {
-
   char ret[1024];
   int k=0;
 
@@ -1071,14 +925,11 @@ std::string Int::GetBase2() {
   ret[k]=0;
 
   return std::string(ret);
-
 }
-
 
 // ------------------------------------------------
 
 void Int::Check() {
-
   double t0;
   double t1;
   double tTotal;
@@ -1128,240 +979,825 @@ void Int::Check() {
     printf("Mult() Results Wrong\nR=%s\nT=%s\n",e.GetBase10().c_str(), c.GetBase10().c_str());
     return;
   }
-  
+ 
   // Div -------------------------------------------------------------------------------------------
-  tTotal = 0.0;
-  ok = true;
-  for (int i = 0; i < 1000 && ok; i++) {
 
-    a.Rand(BISIZE);
-    b.Rand(BISIZE/2);
-    d.Set(&a);
-    e.Set(&b);
+void Int::Div(const Int* a, const Int* b, Int* mod) {
 
-    t0 = Timer::get_tick();
-    a.Div(&b, &c);
-    t1 = Timer::get_tick();
-    tTotal += (t1 - t0);
+    if (a->IsGreater(b)) {
+        if (mod) {
+            mod->Set(a);
+            SetZero();
+            return;
+        } else {
+            Set(a);
+            return;
+        }
+    }
 
-    a.Mult(&e);
-    a.Add(&c);
-    if (!a.IsEqual(&d)) {
-	  ok = false;
-      printf("Div() Results Wrong \nN: %s\nD: %s\nQ: %s\nR: %s\n", 
-        d.GetBase16().c_str(),
-        b.GetBase16().c_str(),
-        a.GetBase16().c_str(),
-        c.GetBase16().c_str()
+    if (a->IsZero()) {
+        SetZero();
+        if (mod) mod->SetZero();
+        return;
+    }
+
+    if (a->IsEqual(b)) {
+        if (mod) mod->SetZero();
+        SetOne();
+        return;
+    }
+
+    // Handle single-word divisor
+    if (b->IsOneWord()) {
+        uint64_t divWord = b->bits64[0];
+        if (divWord == 1) {
+            if (mod) mod->SetZero();
+            Set(a);
+            return;
+        }
         
-      );
-      return;
+        uint64_t carry = 0;
+        Int tmp(*a);
+        
+        for (int i = NB64BLOCK - 1; i >= 0; i--) {
+            uint64_t d = (carry << 64) | tmp.bits64[i];
+            tmp.bits64[i] = d / divWord;
+            carry = d % divWord;
+        }
+        
+        if (mod) mod->Set(carry);
+        Set(&tmp);
+        return;
     }
 
-  }
-  
-  if(ok) {
-    printf("Div() Results OK : ");
-    Timer::printResult("Div", 1000, 0, tTotal);
-  }
-
-  // Modular arithmetic -------------------------------------------------------------------------------
-  // SecpK1 prime
-  b.SetBase16("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F");
-  Int::SetupField(&b);
-
-  // ModInv -------------------------------------------------------------------------------------------
-
-  for (int i = 0; i < 1000 && ok; i++) {
-    a.Rand(BISIZE);
-    b = a;
-    a.ModInv();
-    a.ModMul(&b);
-    if (!a.IsOne()) {
-      printf("ModInv() Results Wrong [%d] %s\n",i, a.GetBase16().c_str());
-	  ok = false;
-    }
-  }
-
-  ok = true;
-  for (int i = 0; i < 100 && ok; i++) {
-
-    // Euler a^-1 = a^(p-2) mod p (p is prime)
-    Int e(Int::GetFieldCharacteristic());
-    e.Sub(2ULL);
-    a.Rand(BISIZE);
-    b = a;
-    b.ModExp(&e);
-
-    a.ModInv();
-    if (!a.IsEqual(&b)) {
-      ok =false;
+    // Use Knuth's algorithm D for multi-word division
+    int m = a->GetLength();
+    int n = b->GetLength();
+    
+    if (n == 0) {
+        // Division by zero
+        SetZero();
+        if (mod) mod->SetZero();
+        return;
     }
 
-  }
-
-  if (!ok) {
-    printf("ModInv()/ModExp() Results Wrong:\nModInv=%s\nModExp=%s\n", a.GetBase16().c_str(),b.GetBase16().c_str());
-    return;
-  } else {
-    printf("ModInv()/ModExp() Results OK\n");
-  }
-
-  t0 = Timer::get_tick();
-  a.Rand(BISIZE);
-  for (int i = 0; i < 100000; i++) {
-    a.AddOne();
-    a.ModInv();
-  }
-  t1 = Timer::get_tick();
-
-  printf("ModInv() Results OK : ");
-  Timer::printResult("Inv", 100000, 0, t1 - t0);
-
-  // IntGroup -----------------------------------------------------------------------------------
-
-  Int m[256];
-  Int chk[256];
-  IntGroup g(256);
-
-  g.Set(m);
-  for (int i = 0; i < 256; i++) {
-    m[i].Rand(256);
-    chk[i].Set(m + i);
-    chk[i].ModInv();
-  }
-  g.ModInv();
-  ok = true;
-  for (int i = 0; i < 256; i++) {
-    if (!m[i].IsEqual(chk + i)) {
-      ok = false;
-      printf("IntGroup.ModInv() Wrong !\n");
-      printf("[%d] %s\n", i, m[i].GetBase16().c_str());
-      printf("[%d] %s\n", i, chk[i].GetBase16().c_str());
-      return;
-    }
-  }
-
-  for (int i = 0; i < 256; i++)
-    m[i].Rand(256);
-  t0 = Timer::get_tick();
-  for (int j = 0; j < 1000; j++) {
-    for (int i = 0; i < 256; i++)
-      m[i].AddOne();
-    g.ModInv();
-  }
-  t1 = Timer::get_tick();
-
-  printf("IntGroup.ModInv() Results OK : ");
-  Timer::printResult("Inv", 1000 * 256, 0, t1 - t0);
-
-  // ModMulK1 ------------------------------------------------------------------------------------
-
-  for (int i = 0; i < 100000; i++) {
-    a.Rand(BISIZE);
-    b.Rand(BISIZE);
-    c.ModMul(&a,&b);
-    d.ModMulK1(&a,&b);
-    if (!c.IsEqual(&d)) {
-      printf("ModMulK1() Wrong !\n");
-      printf("[%d] %s\n", i, c.GetBase16().c_str());
-      printf("[%d] %s\n", i, d.GetBase16().c_str());
-      return;
-    }
-  }
-
-  t0 = Timer::get_tick();
-  a.Rand(BISIZE);
-  for (int i = 0; i < 1000000; i++) {
-    a.AddOne();
-    c.ModMulK1(&a);
-  }
-  t1 = Timer::get_tick();
-
-  printf("ModMulK1() Results OK : ");
-  Timer::printResult("Mult", 1000000, 0, t1 - t0);
-
-  // ModSqrK1 ------------------------------------------------------------------------------------
-
-  for (int i = 0; i < 100000; i++) {
-    a.Rand(BISIZE);
-    c.ModMul(&a, &a);
-    d.ModSquareK1(&a);
-    if (!c.IsEqual(&d)) {
-      printf("ModSquareK1() Wrong !\n");
-      printf("[%d] %s\n", i, c.GetBase16().c_str());
-      printf("[%d] %s\n", i, d.GetBase16().c_str());
-      return;
-    }
-  }
-
-  t0 = Timer::get_tick();
-  b.Rand(BISIZE);
-  for (int i = 0; i < 1000000; i++) {
-    b.AddOne();
-    c.ModSquareK1(&b);
-  }
-  t1 = Timer::get_tick();
-
-  printf("ModSquareK1() Results OK : ");
-  Timer::printResult("Mult", 1000000, 0, t1 - t0);
-
-  // ModMulK1 order -----------------------------------------------------------------------------
-  // InitK1() is done by secpK1
-  b.SetBase16("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-  Int::SetupField(&b);
-
-  for (int i = 0; i < 100000; i++) {
-    a.Rand(BISIZE);
-    b.Rand(BISIZE);
-    c.ModMul(&a,&b);
-    d.Set(&a);
-    d.ModMulK1order(&b);
-    if (!c.IsEqual(&d)) {
-      printf("ModMulK1order() Wrong !\n");
-      printf("[%d] %s\n", i, c.GetBase16().c_str());
-      printf("[%d] %s\n", i, d.GetBase16().c_str());
-      return;
-    }
-  }
-
-  a.Rand(BISIZE);
-  b.Rand(BISIZE);
-  t0 = Timer::get_tick();
-  for (int i = 0; i < 1000000; i++) {
-    c.Set(&a);
-    b.AddOne();
-    c.ModMulK1order(&b);
-  }
-  t1 = Timer::get_tick();
-
-  printf("ModMulK1order() Results OK : ");
-  Timer::printResult("Mult", 1000000, 0, t1 - t0);
-
-  // ModSqrt ------------------------------------------------------------------------------------
-  b.SetBase16("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F");
-  Int::SetupField(&b);
-
-  ok = true;
-  for (int i = 0; i < 100 && ok; i++) {
-
-    bool hasSqrt = false;
-    while (!hasSqrt) {
-      a.Rand(BISIZE);
-      hasSqrt = !a.IsZero() && a.IsLower(Int::GetFieldCharacteristic()) && a.HasSqrt();
+    if (m < n) {
+        if (mod) mod->Set(a);
+        SetZero();
+        return;
     }
 
-    c.Set(&a);
-    a.ModSqrt();
-    b.ModSquare(&a);
-    if (!b.IsEqual(&c)) {
-      printf("ModSqrt() wrong !\n");
-      ok = false;
+    Int u(*a);
+    Int v(*b);
+    Int q;
+    q.SetZero();
+
+    // Normalize
+    uint64_t d = (uint64_t)1 << (64 - v.GetBitLength() % 64);
+    u.Mult(&u, d);
+    v.Mult(&v, d);
+
+    m = u.GetLength();
+    n = v.GetLength();
+
+    for (int j = m - n; j >= 0; j--) {
+        // Estimate qhat
+        uint64_t qhat = u.bits64[j + n] * _BASE + u.bits64[j + n - 1];
+        uint64_t rhat = qhat % v.bits64[n - 1];
+        qhat /= v.bits64[n - 1];
+
+        while (qhat >= _BASE || 
+               (n > 1 && qhat * v.bits64[n - 2] > _BASE * rhat + u.bits64[j + n - 2])) {
+            qhat--;
+            rhat += v.bits64[n - 1];
+            if (rhat >= _BASE) break;
+        }
+
+        // Multiply and subtract
+        uint64_t carry = 0;
+        uint64_t borrow = 0;
+        for (int i = 0; i < n; i++) {
+            uint64_t p = qhat * v.bits64[i] + carry;
+            carry = p >> 64;
+            p &= 0xFFFFFFFFFFFFFFFF;
+            uint64_t sub = u.bits64[j + i] - p - borrow;
+            borrow = (u.bits64[j + i] < p) || (sub > u.bits64[j + i]) ? 1 : 0;
+            u.bits64[j + i] = sub;
+        }
+        uint64_t sub = u.bits64[j + n] - carry - borrow;
+        borrow = (u.bits64[j + n] < carry) || (sub > u.bits64[j + n]) ? 1 : 0;
+        u.bits64[j + n] = sub;
+
+        // Test remainder
+        if (borrow != 0) {
+            qhat--;
+            carry = 0;
+            for (int i = 0; i < n; i++) {
+                uint64_t sum = u.bits64[j + i] + v.bits64[i] + carry;
+                carry = sum >> 64;
+                u.bits64[j + i] = sum & 0xFFFFFFFFFFFFFFFF;
+            }
+            u.bits64[j + n] += carry;
+        }
+
+        if (j < NB64BLOCK)
+            q.bits64[j] = qhat;
     }
 
-  }
-  if(!ok) return;
+    // Denormalize remainder
+    if (mod) {
+        u.ShiftR(1);
+        mod->Set(&u);
+    }
 
-  printf("ModSqrt() Results OK !\n");
-
+    Set(&q);
 }
+
+void Int::Divide(Int* a, Int* b, Int* mod) {
+    Div(a, b, mod);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModInv -----------------------------------------------------------------------
+
+void Int::ModInv() {
+    Int m(*this);
+    SetOne();
+    Int a = m;
+    Int b = MODULO;
+    Int u(*this);
+    Int v;
+    v.SetZero();
+
+    while (!a.IsZero()) {
+        Int q;
+        Int r;
+        b.Div(&a, &q, &r);
+        b.Set(&a);
+        a.Set(&r);
+
+        Int tmp = u;
+        u.Set(&v);
+        v.Mult(&q, &v);
+        v.Sub(&tmp, &v);
+    }
+
+    if (b.IsOne()) {
+        if (u.IsNegative())
+            u.Add(&MODULO);
+        Set(&u);
+    } else {
+        SetZero();
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModK1 -----------------------------------------------------------------------
+
+void Int::ModK1() {
+    Int p(this);
+    Int m(this);
+    Int r;
+    r.SetZero();
+
+    p.Sub(&m, &r);
+    if (r.IsNegative()) {
+        Set(&p);
+    } else {
+        Set(&r);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModMulK1 --------------------------------------------------------------------
+
+void Int::ModMulK1(Int* a) {
+    Int p;
+    p.Mult(this, a);
+    p.ModK1();
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModSquareK1 -----------------------------------------------------------------
+
+void Int::ModSquareK1() {
+    Int p;
+    p.Mult(this, this);
+    p.ModK1();
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// Mod -------------------------------------------------------------------------
+
+void Int::Mod(Int* a) {
+    if (IsGreaterOrEqual(a)) {
+        Int r;
+        Div(a, &r);
+        Set(&r);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModMul ----------------------------------------------------------------------
+
+void Int::ModMul(Int* a, Int* b) {
+    Int p;
+    p.Mult(a, b);
+    p.Mod(&MODULO);
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModSquare -------------------------------------------------------------------
+
+void Int::ModSquare() {
+    Int p;
+    p.Mult(this, this);
+    p.Mod(&MODULO);
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModPow ----------------------------------------------------------------------
+
+void Int::ModPow(Int* e) {
+    Int base(*this);
+    SetOne();
+
+    for (int i = NB64BLOCK - 1; i >= 0; i--) {
+        uint64_t mask = (uint64_t)1 << 63;
+        for (int j = 0; j < 64; j++) {
+            ModSquare();
+            if (e->bits64[i] & mask) {
+                ModMul(&base);
+            }
+            mask >>= 1;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModPow2 ---------------------------------------------------------------------
+
+void Int::ModPow2(Int* e, uint32_t pow2) {
+    Int base(*this);
+    SetOne();
+
+    for (int i = NB64BLOCK - 1; i >= 0; i--) {
+        uint64_t mask = (uint64_t)1 << 63;
+        for (int j = 0; j < 64; j++) {
+            ModSquare();
+            if (e->bits64[i] & mask) {
+                ModMul(&base);
+            }
+            mask >>= 1;
+        }
+    }
+
+    // Apply pow2 modulo
+    if (pow2 > 0) {
+        Int p2;
+        p2.SetInt32(1);
+        p2.ShiftL(pow2);
+        Mod(&p2);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Sqrt ------------------------------------------------------------------------
+
+void Int::Sqrt() {
+    if (IsNegative() || IsZero()) {
+        SetZero();
+        return;
+    }
+
+    Int x;
+    x.Set(this);
+    Int y;
+    y.SetInt32(1);
+    y.ShiftR(1);
+    y.Add(&x);
+
+    while (y.IsLower(&x)) {
+        x.Set(&y);
+        y.Set(this);
+        y.Div(&x, &y);
+        y.Add(&x);
+        y.ShiftR(1);
+    }
+
+    Set(&x);
+}
+
+// -----------------------------------------------------------------------------
+
+// GetBitLength ----------------------------------------------------------------
+
+int Int::GetBitLength() {
+    int bitLength = 0;
+    int i = NB64BLOCK - 1;
+
+    // Skip leading zeros
+    while (i >= 0 && bits64[i] == 0)
+        i--;
+
+    if (i >= 0) {
+        uint64_t mask = (uint64_t)1 << 63;
+        while (mask > 0 && (bits64[i] & mask) == 0) {
+            mask >>= 1;
+            bitLength++;
+        }
+        bitLength = 64 * (i + 1) - bitLength;
+    }
+
+    return bitLength;
+}
+
+// -----------------------------------------------------------------------------
+
+// GetLength -------------------------------------------------------------------
+
+int Int::GetLength() {
+    int length = NB64BLOCK;
+    while (length > 0 && bits64[length - 1] == 0)
+        length--;
+    return length;
+}
+
+// -----------------------------------------------------------------------------
+
+// IsProbablePrime -------------------------------------------------------------
+
+bool Int::IsProbablePrime() {
+    // Handle small primes
+    if (IsNegative())
+        return false;
+
+    if (GetBitLength() <= 64) {
+        uint64_t n = GetInt64();
+        if (n < 2) return false;
+        if (n == 2 || n == 3) return true;
+        if (n % 2 == 0) return false;
+
+        // Check against small primes
+        static const uint64_t smallPrimes[] = {
+            3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97
+        };
+        
+        for (uint64_t p : smallPrimes) {
+            if (n == p) return true;
+            if (n % p == 0) return false;
+        }
+    }
+
+    // Miller-Rabin test
+    Int d(*this);
+    d.SubOne();
+    Int nMinusOne(d);
+
+    int s = 0;
+    while (d.IsEven()) {
+        d.ShiftR(1);
+        s++;
+    }
+
+    static const int k = 5; // Number of iterations
+    static const Int smallPrimes[] = {
+        Int(2), Int(3), Int(5), Int(7), Int(11)
+    };
+
+    for (int i = 0; i < k; i++) {
+        Int a = smallPrimes[i];
+        if (a.IsGreaterOrEqual(this))
+            break;
+
+        Int x;
+        x.ModPow(&a, &d, this);
+
+        if (x.IsOne() || x.IsEqual(&nMinusOne))
+            continue;
+
+        bool probablePrime = false;
+        for (int j = 0; j < s - 1; j++) {
+            x.ModSquare();
+            if (x.IsOne())
+                return false;
+            if (x.IsEqual(&nMinusOne)) {
+                probablePrime = true;
+                break;
+            }
+        }
+
+        if (!probablePrime)
+            return false;
+    }
+
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+
+// NextPrime -------------------------------------------------------------------
+
+void Int::NextPrime() {
+    if (IsNegative())
+        SetZero();
+
+    if (IsEven())
+        AddOne();
+
+    while (!IsProbablePrime()) {
+        AddOne();
+        AddOne();
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Rand ------------------------------------------------------------------------
+
+void Int::Rand(int nbits) {
+    SetZero();
+    for (int i = 0; i < (nbits + 63) / 64 && i < NB64BLOCK; i++) {
+        bits64[i] = rndl();
+    }
+    int shift = nbits % 64;
+    if (shift != 0) {
+        bits64[(nbits - 1) / 64] &= (((uint64_t)1 << shift) - 1);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Rand ------------------------------------------------------------------------
+
+void Int::Rand(Int* randMax) {
+    int b = randMax->GetBitLength();
+    while (true) {
+        Rand(b);
+        if (IsLower(randMax))
+            break;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// RandMod ---------------------------------------------------------------------
+
+void Int::RandMod(Int* mod) {
+    Rand(mod);
+    Mod(mod);
+}
+
+// -----------------------------------------------------------------------------
+
+// Add -------------------------------------------------------------------------
+
+void Int::Add(Int* a) {
+    uint64_t carry = 0;
+    for (int i = 0; i < NB64BLOCK; i++) {
+        uint64_t sum = bits64[i] + a->bits64[i] + carry;
+        carry = (sum < bits64[i]) || (carry != 0 && sum <= bits64[i]) ? 1 : 0;
+        bits64[i] = sum;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// AddOne ----------------------------------------------------------------------
+
+void Int::AddOne() {
+    for (int i = 0; i < NB64BLOCK; i++) {
+        bits64[i]++;
+        if (bits64[i] != 0)
+            break;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Sub -------------------------------------------------------------------------
+
+void Int::Sub(Int* a) {
+    uint64_t borrow = 0;
+    for (int i = 0; i < NB64BLOCK; i++) {
+        uint64_t diff = bits64[i] - a->bits64[i] - borrow;
+        borrow = (bits64[i] < a->bits64[i]) || (borrow != 0 && diff >= bits64[i]) ? 1 : 0;
+        bits64[i] = diff;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// SubOne ----------------------------------------------------------------------
+
+void Int::SubOne() {
+    for (int i = 0; i < NB64BLOCK; i++) {
+        uint64_t old = bits64[i];
+        bits64[i]--;
+        if (old != 0)
+            break;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Neg -------------------------------------------------------------------------
+
+void Int::Neg() {
+    for (int i = 0; i < NB64BLOCK; i++) {
+        bits64[i] = ~bits64[i];
+    }
+    AddOne();
+}
+
+// -----------------------------------------------------------------------------
+
+// ShiftL ----------------------------------------------------------------------
+
+void Int::ShiftL(uint32_t shift) {
+    if (shift == 0) return;
+
+    int wordShift = shift / 64;
+    int bitShift = shift % 64;
+
+    if (bitShift == 0) {
+        for (int i = NB64BLOCK - 1; i >= wordShift; i--) {
+            bits64[i] = bits64[i - wordShift];
+        }
+    } else {
+        for (int i = NB64BLOCK - 1; i > wordShift; i--) {
+            bits64[i] = (bits64[i - wordShift] << bitShift) | 
+                        (bits64[i - wordShift - 1] >> (64 - bitShift));
+        }
+        bits64[wordShift] = bits64[0] << bitShift;
+    }
+
+    for (int i = 0; i < wordShift; i++) {
+        bits64[i] = 0;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ShiftR ----------------------------------------------------------------------
+
+void Int::ShiftR(uint32_t shift) {
+    if (shift == 0) return;
+
+    int wordShift = shift / 64;
+    int bitShift = shift % 64;
+
+    if (bitShift == 0) {
+        for (int i = 0; i < NB64BLOCK - wordShift; i++) {
+            bits64[i] = bits64[i + wordShift];
+        }
+    } else {
+        for (int i = 0; i < NB64BLOCK - wordShift - 1; i++) {
+            bits64[i] = (bits64[i + wordShift] >> bitShift) | 
+                        (bits64[i + wordShift + 1] << (64 - bitShift));
+        }
+        bits64[NB64BLOCK - wordShift - 1] = bits64[NB64BLOCK - 1] >> bitShift;
+    }
+
+    for (int i = NB64BLOCK - wordShift; i < NB64BLOCK; i++) {
+        bits64[i] = 0;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// Mult ------------------------------------------------------------------------
+
+void Int::Mult(Int* a, Int* b) {
+    uint64_t t[NB64BLOCK * 2] = {0};
+
+    for (int i = 0; i < NB64BLOCK; i++) {
+        uint64_t carry = 0;
+        for (int j = 0; j < NB64BLOCK; j++) {
+            uint64_t hi, lo;
+            lo = _umul128(a->bits64[i], b->bits64[j], &hi);
+            
+            uint64_t sum = t[i + j] + lo + carry;
+            carry = hi + (sum < lo ? 1 : 0);
+            t[i + j] = sum;
+        }
+        t[i + NB64BLOCK] = carry;
+    }
+
+    for (int i = 0; i < NB64BLOCK; i++) {
+        bits64[i] = t[i];
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModInvFast ------------------------------------------------------------------
+
+void Int::ModInvFast() {
+    Int u(*this);
+    Int v = MODULO;
+    Int b(1);
+    Int c(0);
+
+    while (!u.IsOne() && !v.IsOne()) {
+        while (u.IsEven()) {
+            u.ShiftR(1);
+            if (b.IsEven()) {
+                b.ShiftR(1);
+            } else {
+                b.Add(&MODULO);
+                b.ShiftR(1);
+            }
+        }
+        
+        while (v.IsEven()) {
+            v.ShiftR(1);
+            if (c.IsEven()) {
+                c.ShiftR(1);
+            } else {
+                c.Add(&MODULO);
+                c.ShiftR(1);
+            }
+        }
+        
+        if (u.IsGreaterOrEqual(&v)) {
+            u.Sub(&v);
+            b.Sub(&c);
+        } else {
+            v.Sub(&u);
+            c.Sub(&b);
+        }
+    }
+
+    if (u.IsOne()) {
+        while (b.IsNegative())
+            b.Add(&MODULO);
+        Set(&b);
+    } else {
+        while (c.IsNegative())
+            c.Add(&MODULO);
+        Set(&c);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModMulFast ------------------------------------------------------------------
+
+void Int::ModMulFast(Int* a, Int* b) {
+    Int p;
+    p.Mult(a, b);
+    p.ModFast();
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModSquareFast ---------------------------------------------------------------
+
+void Int::ModSquareFast() {
+    Int p;
+    p.Mult(this, this);
+    p.ModFast();
+    Set(&p);
+}
+
+// -----------------------------------------------------------------------------
+
+// ModFast ---------------------------------------------------------------------
+
+void Int::ModFast() {
+    if (IsGreaterOrEqual(&MODULO)) {
+        Int r;
+        Div(&MODULO, &r);
+        Set(&r);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModPowFast ------------------------------------------------------------------
+
+void Int::ModPowFast(Int* e) {
+    Int base(*this);
+    SetOne();
+
+    for (int i = NB64BLOCK - 1; i >= 0; i--) {
+        uint64_t mask = (uint64_t)1 << 63;
+        for (int j = 0; j < 64; j++) {
+            ModSquareFast();
+            if (e->bits64[i] & mask) {
+                ModMulFast(&base);
+            }
+            mask >>= 1;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ModPow2Fast -----------------------------------------------------------------
+
+void Int::ModPow2Fast(Int* e, uint32_t pow2) {
+    Int base(*this);
+    SetOne();
+
+    for (int i = NB64BLOCK - 1; i >= 0; i--) {
+        uint64_t mask = (uint64_t)1 << 63;
+        for (int j = 0; j < 64; j++) {
+            ModSquareFast();
+            if (e->bits64[i] & mask) {
+                ModMulFast(&base);
+            }
+            mask >>= 1;
+        }
+    }
+
+    // Apply pow2 modulo
+    if (pow2 > 0) {
+        Int p2;
+        p2.SetInt32(1);
+        p2.ShiftL(pow2);
+        ModFast(&p2);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// SetBaseN --------------------------------------------------------------------
+
+void Int::SetBaseN(const char* value, int base) {
+    SetZero();
+    Int power(1);
+    Int digit;
+    Int baseInt;
+    baseInt.SetInt32(base);
+
+    const char* ptr = value;
+    while (*ptr) ptr++; // Find end of string
+    ptr--;
+
+    while (ptr >= value) {
+        char c = *ptr;
+        if (c >= '0' && c <= '9') {
+            digit.SetInt32(c - '0');
+        } else if (c >= 'A' && c <= 'Z') {
+            digit.SetInt32(c - 'A' + 10);
+        } else if (c >= 'a' && c <= 'z') {
+            digit.SetInt32(c - 'a' + 10);
+        } else {
+            digit.SetZero();
+        }
+
+        Int tmp;
+        tmp.Mult(&digit, &power);
+        Add(&tmp);
+
+        if (ptr > value) {
+            tmp.Mult(&power, &baseInt);
+            power.Set(&tmp);
+        }
+        ptr--;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// ToString --------------------------------------------------------------------
+
+std::string Int::ToString(int base) {
+    if (base < 2 || base > 36) return "0";
+
+    if (IsZero()) return "0";
+
+    Int tmp(*this);
+    std::string result;
+    Int baseInt;
+    baseInt.SetInt32(base);
+    Int digit;
+
+    while (!tmp.IsZero()) {
+        tmp.Div(&baseInt, &digit);
+        uint32_t d = digit.GetInt32();
+        char c = (d < 10) ? ('0' + d) : ('A' + d - 10);
+        result = c + result;
+    }
+
+    return result;
+}
+
+// -----------------------------------------------------------------------------
