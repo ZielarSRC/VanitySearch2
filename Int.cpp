@@ -18,15 +18,13 @@
 #include "Int.h"
 #include "IntGroup.h"
 #include <string.h>
-#include <emmintrin.h>
+#include <immintrin.h>
 #include "Timer.h"
 
 #define MAX(x,y) (((x)>(y))?(x):(y))
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 Int _ONE(1);
-
-// ------------------------------------------------
 
 Int::Int() {
     CLEAR();
@@ -46,8 +44,6 @@ Int::Int(int64_t i64) {
     bits64[0] = i64;
 }
 
-// ------------------------------------------------
-
 void Int::CLEAR() {
     memset(bits64, 0, NB64BLOCK * 8);
 }
@@ -56,13 +52,9 @@ void Int::CLEARFF() {
     memset(bits64, 0xFF, NB64BLOCK * 8);
 }
 
-// ------------------------------------------------
-
 void Int::Set(Int *a) {
     memcpy(bits64, a->bits64, NB64BLOCK * 8);
 }
-
-// ------------------------------------------------
 
 void Int::Add(Int *a) {
     unsigned char c = 0;
@@ -87,8 +79,6 @@ void Int::Add(Int *a, Int *b) {
     for (int i = 0; i < NB64BLOCK; i++)
         c = _addcarry_u64(c, a->bits64[i], b->bits64[i], bits64 + i);
 }
-
-// ------------------------------------------------
 
 bool Int::IsGreater(Int *a) {
     for (int i = NB64BLOCK - 1; i >= 0; i--) {
@@ -132,8 +122,6 @@ bool Int::IsZero() {
     return true;
 }
 
-// ------------------------------------------------
-
 void Int::SetInt32(uint32_t value) {
     CLEAR();
     bits[0] = value;
@@ -176,8 +164,6 @@ void Int::SetQWord(int n, uint64_t b) {
     bits64[n] = b;
 }
 
-// ------------------------------------------------
-
 void Int::Sub(Int *a) {
     unsigned char c = 0;
     for (int i = 0; i < NB64BLOCK; i++)
@@ -202,8 +188,6 @@ void Int::SubOne() {
         c = _subborrow_u64(c, bits64[i], 0, bits64 + i);
 }
 
-// ------------------------------------------------
-
 bool Int::IsPositive() {
     return (int64_t)(bits64[NB64BLOCK - 1]) >= 0;
 }
@@ -224,8 +208,6 @@ bool Int::IsOdd() {
     return (bits[0] & 0x1) == 1;
 }
 
-// ------------------------------------------------
-
 void Int::Neg() {
     unsigned char c = 1;
     for (int i = 0; i < NB64BLOCK; i++) {
@@ -233,8 +215,6 @@ void Int::Neg() {
         c = _addcarry_u64(c, tmp, 0, bits64 + i);
     }
 }
-
-// ------------------------------------------------
 
 void Int::ShiftL32Bit() {
     for (int i = NB32BLOCK - 1; i > 0; i--)
@@ -284,8 +264,6 @@ void Int::ShiftR(uint32_t n) {
     }
 }
 
-// ------------------------------------------------
-
 void Int::Mult(Int *a) {
     Int b(this);
     Mult(a, &b);
@@ -310,8 +288,6 @@ void Int::Mult(Int *a, Int *b) {
     memcpy(bits64, t, NB64BLOCK * 8);
 }
 
-// ------------------------------------------------
-
 void Int::Div(Int *a, Int *b, Int *mod) {
     if (a->IsGreater(b)) {
         if (mod) {
@@ -335,7 +311,6 @@ void Int::Div(Int *a, Int *b, Int *mod) {
         return;
     }
 
-    // Handle single-word divisor
     if (b->IsOneWord()) {
         uint64_t divWord = b->bits64[0];
         if (divWord == 1) {
@@ -358,13 +333,11 @@ void Int::Div(Int *a, Int *b, Int *mod) {
         return;
     }
 
-    // Knuth's algorithm D
     Int u(*a);
     Int v(*b);
     Int q;
     q.SetZero();
 
-    // Normalize
     uint64_t d = (uint64_t)1 << (64 - v.GetBitLength() % 64);
     u.Mult(&u, d);
     v.Mult(&v, d);
@@ -373,7 +346,6 @@ void Int::Div(Int *a, Int *b, Int *mod) {
     int n = v.GetLength();
 
     for (int j = m - n; j >= 0; j--) {
-        // Estimate qhat
         uint64_t qhat = u.bits64[j + n] * _BASE + u.bits64[j + n - 1];
         uint64_t rhat = qhat % v.bits64[n - 1];
         qhat /= v.bits64[n - 1];
@@ -385,7 +357,6 @@ void Int::Div(Int *a, Int *b, Int *mod) {
             if (rhat >= _BASE) break;
         }
 
-        // Multiply and subtract
         uint64_t carry = 0;
         uint64_t borrow = 0;
         for (int i = 0; i < n; i++) {
@@ -400,7 +371,6 @@ void Int::Div(Int *a, Int *b, Int *mod) {
         borrow = (u.bits64[j + n] < carry) || (sub > u.bits64[j + n]) ? 1 : 0;
         u.bits64[j + n] = sub;
 
-        // Test remainder
         if (borrow != 0) {
             qhat--;
             carry = 0;
@@ -416,7 +386,6 @@ void Int::Div(Int *a, Int *b, Int *mod) {
             q.bits64[j] = qhat;
     }
 
-    // Denormalize remainder
     if (mod) {
         u.ShiftR(1);
         mod->Set(&u);
@@ -425,15 +394,11 @@ void Int::Div(Int *a, Int *b, Int *mod) {
     Set(&q);
 }
 
-// ------------------------------------------------
-
 void Int::Mod(Int *n) {
     Int r;
     Div(n, &r);
     Set(&r);
 }
-
-// ------------------------------------------------
 
 void Int::ModMul(Int *a, Int *b, Int *n) {
     Int p;
@@ -442,16 +407,12 @@ void Int::ModMul(Int *a, Int *b, Int *n) {
     Set(&p);
 }
 
-// ------------------------------------------------
-
 void Int::ModSquare(Int *n) {
     Int p;
     p.Mult(this, this);
     p.Mod(n);
     Set(&p);
 }
-
-// ------------------------------------------------
 
 void Int::ModPow(Int *e, Int *n) {
     Int base(*this);
@@ -467,8 +428,6 @@ void Int::ModPow(Int *e, Int *n) {
         }
     }
 }
-
-// ------------------------------------------------
 
 void Int::ModInv() {
     Int m(*this);
@@ -500,8 +459,6 @@ void Int::ModInv() {
     }
 }
 
-// ------------------------------------------------
-
 int Int::GetBitLength() {
     int bitLength = 0;
     int i = NB64BLOCK - 1;
@@ -521,16 +478,12 @@ int Int::GetBitLength() {
     return bitLength;
 }
 
-// ------------------------------------------------
-
 int Int::GetLength() {
     int length = NB64BLOCK;
     while (length > 0 && bits64[length - 1] == 0)
         length--;
     return length;
 }
-
-// ------------------------------------------------
 
 void Int::Rand(int nbits) {
     SetZero();
@@ -541,8 +494,6 @@ void Int::Rand(int nbits) {
     if (shift != 0)
         bits64[(nbits - 1) / 64] &= (((uint64_t)1 << shift) - 1);
 }
-
-// ------------------------------------------------
 
 void Int::SetBase10(char *value) {
     CLEAR();
@@ -557,8 +508,6 @@ void Int::SetBase10(char *value) {
         pw.Mult(10);
     }
 }
-
-// ------------------------------------------------
 
 std::string Int::GetBase10() {
     std::string ret;
@@ -585,8 +534,6 @@ std::string Int::GetBase10() {
     return ret;
 }
 
-// ------------------------------------------------
-
 std::string Int::GetBase16() {
     const char *hex = "0123456789ABCDEF";
     std::string ret;
@@ -603,18 +550,52 @@ std::string Int::GetBase16() {
     return ret.empty() ? "0" : ret;
 }
 
-// ------------------------------------------------
-
 int Int::GetBit(uint32_t n) {
     uint32_t byte = n >> 5;
     uint32_t bit = n & 31;
     return (bits[byte] >> bit) & 1;
 }
 
-// ------------------------------------------------
-
 void Int::Check() {
-    // Test code here...
-}
+    Int a, b, c, d, e, R;
 
-// ------------------------------------------------
+    a.SetBase10("4743256844168384767987");
+    b.SetBase10("1679314142928575978367");
+    if (strcmp(a.GetBase10().c_str(), "4743256844168384767987") != 0) {
+        printf(" GetBase10() failed ! %s!=4743256844168384767987\n", a.GetBase10().c_str());
+    }
+    if (strcmp(b.GetBase10().c_str(), "1679314142928575978367") != 0) {
+        printf(" GetBase10() failed ! %s!=1679314142928575978367\n", b.GetBase10().c_str());
+        return;
+    }
+
+    printf("GetBase10() Results OK\n");
+
+    double t0 = Timer::get_tick();
+    for (int i = 0; i < 10000; i++) c.Add(&a, &b);
+    double t1 = Timer::get_tick();
+
+    if (c.GetBase10() == "6422570987096960746354") {
+        printf("Add() Results OK : ");
+        Timer::printResult("Add", 10000, t0, t1);
+    } else {
+        printf("Add() Results Wrong\nR=%s\nT=6422570987096960746354\n", c.GetBase10().c_str());
+        return;
+    }
+
+    a.SetBase10("3890902718436931151119442452387018319292503094706912504064239834754167");
+    b.SetBase10("474325684416838476798716793141429285759783676422570987096960746354");
+    e.SetBase10("1845555094921934741640873731771879197054909502699192730283220486240724687661257894226660948002650341240452881231721004292250660431557118");
+
+    t0 = Timer::get_tick();
+    for (int i = 0; i < 10000; i++) c.Mult(&a, &b);
+    t1 = Timer::get_tick();
+
+    if (c.IsEqual(&e)) {
+        printf("Mult() Results OK : ");
+        Timer::printResult("Mult", 10000, t0, t1);
+    } else {
+        printf("Mult() Results Wrong\nR=%s\nT=%s\n",e.GetBase10().c_str(), c.GetBase10().c_str());
+        return;
+    }
+}
