@@ -1,64 +1,33 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #include "Wildcard.h"
+#include <stdexcept>
 
-using namespace std;
+Wildcard::Wildcard(const std::string& pattern) 
+    : originalPattern(pattern),
+      regexPattern(convertToRegex(pattern), std::regex::optimize) {}
 
+bool Wildcard::match(const std::string& input) const {
+    return std::regex_match(input, regexPattern);
+}
 
-bool Wildcard::match(const char *str, const char *pattern, bool caseSensitive) {
+bool Wildcard::isPattern(const std::string& str) {
+    return str.find_first_of("*?") != std::string::npos;
+}
 
-  const char *s;
-  const char *p;
-  bool star = false;
-
-loopStart:
-  for (s = str, p = pattern; *s; ++s, ++p) {
-
-    switch (*p) {
-    case '?':
-      if (*s == '.') goto starCheck;
-      break;
-
-    case '*':
-      star = true;
-      str = s, pattern = p;
-      if (!*++pattern) return true;
-      goto loopStart;
-
-    default:
-      if (caseSensitive) {
-        if (*s != *p)
-          goto starCheck;
-      } else {
-        if (tolower(*s) != tolower(*p))
-          goto starCheck;
-      }
-      break;
-    } /* endswitch */
-
-  } /* endfor */
-
-  if (*p == '*') ++p;
-  return (!*p);
-
-starCheck:
-  if (!star) return false;
-  str++;
-  goto loopStart;
-
+std::string Wildcard::convertToRegex(const std::string& wildcardPattern) {
+    std::string regexPattern;
+    regexPattern.reserve(wildcardPattern.size() * 2);
+    regexPattern.append("^");
+    
+    for (char c : wildcardPattern) {
+        switch (c) {
+            case '*': regexPattern.append(".*"); break;
+            case '?': regexPattern.append("."); break;
+            case '.': regexPattern.append("\\."); break;
+            case '\\': regexPattern.append("\\\\"); break;
+            default: regexPattern += c;
+        }
+    }
+    
+    regexPattern.append("$");
+    return regexPattern;
 }
