@@ -1,21 +1,26 @@
 #ifndef GPUENGINE_H
 #define GPUENGINE_H
 
-#include <vector>
 #include "SECP256k1.h"
+#include <memory>
+#include <vector>
 
 class GPUEngine {
 public:
-    GPUEngine(int deviceId = 0);
+    explicit GPUEngine(int deviceId = 0);
     ~GPUEngine();
-    
+
     void SetKeys(const std::vector<SECP256k1::uint256_t>& keys);
     void Compute();
-    std::vector<uint32_t> GetResults();
+    std::vector<SECP256k1::uint256_t> GetResults() const;
+
+    // Usuwanie konstruktorów kopiujących
+    GPUEngine(const GPUEngine&) = delete;
+    GPUEngine& operator=(const GPUEngine&) = delete;
 
 private:
     class Impl;
-    Impl* impl;
+    std::unique_ptr<Impl> impl;
 };
 
 #endif
