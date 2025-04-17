@@ -6,122 +6,137 @@
 #include <atomic>
 #include <mutex>
 #include <openssl/sha.h>
+#include "SECP256k1.h"
+#include "AVX256_SHA256.h"
+#include "WorkStealingScheduler.h"
 
 #ifdef WITH_GPU
-#include <CL/cl.h>
-#include <CL/cl_ext.h>
+#include "GPUEngine.h"
+#include "GPUMemoryManager.h"
 #endif
-
-class AVX256_SHA256 {
-public:
-    void hash_4_keys_at_once(const uint8_t* inputs, uint8_t* outputs) {
-        __m256i a, b, c, d, e, f, g, h;
-        // AVX2 implementacja SHA-256 dla 4 kluczy równolegle
-        // ... pełna implementacja wykorzystująca instrukcje VAES
-        _mm256_storeu_si256((__m256i*)outputs, a);
-    }
-};
 
 class TurboSearchEngine {
 private:
-    std::vector<std::thread> cpu_threads;
+    std::vector<std::thread> workers;
     std::atomic<uint64_t> keys_checked{0};
     std::atomic<bool> stop_flag{false};
     AVX256_SHA256 avx_hasher;
+    SECP256k1 secp;
+    WorkStealingScheduler scheduler;
 
 #ifdef WITH_GPU
-    cl_context gpu_context;
-    cl_kernel gpu_kernel;
-    cl_command_queue gpu_queue;
-    cl_mem gpu_keys_buffer;
-    cl_mem gpu_results_buffer;
+    GPUEngine gpu_engine;
+    GPUMemoryManager gpu_memory;
 #endif
 
+    struct Result {
+        Int key;
+        std::array<uint8_t, 20> address;
+    };
+
+    std::mutex results_mutex;
+    std::vector<Result> found_results;
+
     void cpu_search_worker(int thread_id) {
-        alignas(32) uint8_t pubkeys[4 * 65];
-        alignas(32) uint8_t hashes[4 * 32];
-        Int keys[4];
-        
-        while (!stop_flag) {
-            // Generowanie 4 kluczy równolegle
-            for (int i = 0; i < 4; ++i) {
-                keys[i] = random_key();
-                generate_public_key(pubkeys + i*65, keys[i]);
+        constexpr size_t batch_size = 4;
+        std::array<Int, batch_size> keys;
+        std::array<Point, batch_size> points;
+        std::array<std::array<uint8_t, 65>, batch_size> pubkeys;
+        std::array<std::array<uint8_t, 32>, batch_size> hashes;
+
+        SIMDKeyGenerator key_gen;
+        MontgomeryLadder ladder;
+
+        while (!stop_flag.load(std::memory_order_relaxed)) {
+            // Generowanie kluczy
+            key_gen.generate_4_keys(keys.data());
+
+            // Obliczanie kluczy publicznych
+            for (size_t i = 0; i < batch_size; ++i) {
+                ladder.scalar_multiply(points[i], keys[i], secp.G());
+                pubkeys[i][0] = 0x04;
+                memcpy(pubkeys[i].data() + 1, points[i].x.bits64, 32);
+                memcpy(pubkeys[i].data() + 33, points[i].y.bits64, 32);
             }
-            
-            // AVX2 hashowanie
-            avx_hasher.hash_4_keys_at_once(pubkeys, hashes);
-            
+
+            // Haszowanie
+            avx_hasher.hash_4_keys(pubkeys, hashes);
+
             // Sprawdzanie wyników
-            for (int i = 0; i < 4; ++i) {
-                if (check_hash(hashes + i*32)) {
-                    report_found_key(keys[i]);
+            for (size_t i = 0; i < batch_size; ++i) {
+                if (check_address(hashes[i])) {
+                    std::lock_guard<std::mutex> lock(results_mutex);
+                    found_results.push_back({keys[i], hash_to_address(hashes[i])});
                 }
             }
-            
-            keys_checked += 4;
+
+            keys_checked.fetch_add(batch_size, std::memory_order_relaxed);
         }
     }
 
 #ifdef WITH_GPU
     void gpu_search_worker() {
-        const size_t batch_size = 1'000'000;
-        std::vector<uint8_t> keys(batch_size * 32);
+        constexpr size_t batch_size = 1'000'000;
+        std::vector<Int> keys(batch_size);
         std::vector<uint32_t> results(batch_size);
-        
-        while (!stop_flag) {
-            // Przygotowanie danych
+
+        while (!stop_flag.load(std::memory_order_relaxed)) {
+            // Generowanie kluczy
             for (size_t i = 0; i < batch_size; ++i) {
-                Int key = random_key();
-                memcpy(keys.data() + i*32, key.bits64, 32);
+                keys[i] = Int::Rand(256);
             }
-            
-            // Wysłanie na GPU
-            clEnqueueWriteBuffer(gpu_queue, gpu_keys_buffer, CL_TRUE, 0,
-                               batch_size * 32, keys.data(), 0, NULL, NULL);
-            
-            // Uruchomienie kernela
-            size_t global_size = batch_size;
-            clEnqueueNDRangeKernel(gpu_queue, gpu_kernel, 1, NULL,
-                                  &global_size, NULL, 0, NULL, NULL);
-            
-            // Pobranie wyników
-            clEnqueueReadBuffer(gpu_queue, gpu_results_buffer, CL_TRUE, 0,
-                              batch_size * sizeof(uint32_t), results.data(),
-                              0, NULL, NULL);
-            
-            // Przetworzenie wyników
+
+            // Przeszukiwanie GPU
+            gpu_engine.search(keys, results);
+
+            // Przetwarzanie wyników
             for (size_t i = 0; i < batch_size; ++i) {
                 if (results[i]) {
-                    Int found_key;
-                    memcpy(found_key.bits64, keys.data() + i*32, 32);
-                    report_found_key(found_key);
+                    std::lock_guard<std::mutex> lock(results_mutex);
+                    found_results.push_back({keys[i], {}});
                 }
             }
-            
-            keys_checked += batch_size;
+
+            keys_checked.fetch_add(batch_size, std::memory_order_relaxed);
         }
     }
 #endif
 
 public:
-    void start_search(int cpu_threads_count) {
-        // Inicjalizacja GPU
+    TurboSearchEngine() 
 #ifdef WITH_GPU
-        init_gpu();
-        cpu_threads.emplace_back(&TurboSearchEngine::gpu_search_worker, this);
+        : gpu_memory(gpu_engine.get_context(), gpu_engine.get_device())
+#endif
+    {
+        scheduler.initialize(std::thread::hardware_concurrency());
+    }
+
+    void start(int cpu_threads) {
+#ifdef WITH_GPU
+        if (gpu_engine.initialize()) {
+            workers.emplace_back(&TurboSearchEngine::gpu_search_worker, this);
+            cpu_threads = std::max(1, cpu_threads - 1);
+        }
 #endif
 
-        // Uruchomienie wątków CPU
-        for (int i = 0; i < cpu_threads_count; ++i) {
-            cpu_threads.emplace_back(&TurboSearchEngine::cpu_search_worker, this, i);
+        for (int i = 0; i < cpu_threads; ++i) {
+            workers.emplace_back(&TurboSearchEngine::cpu_search_worker, this, i);
         }
     }
 
-    void stop_search() {
-        stop_flag = true;
-        for (auto& t : cpu_threads) {
+    void stop() {
+        stop_flag.store(true, std::memory_order_relaxed);
+        for (auto& t : workers) {
             if (t.joinable()) t.join();
         }
+    }
+
+    std::vector<Result> get_results() const {
+        std::lock_guard<std::mutex> lock(results_mutex);
+        return found_results;
+    }
+
+    uint64_t get_keys_checked() const {
+        return keys_checked.load(std::memory_order_relaxed);
     }
 };
