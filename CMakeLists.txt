@@ -24,17 +24,17 @@ endif()
 
 # Pliki źródłowe
 set(SOURCES
-    src/main.cpp
-    src/SECP256k1.cpp
-    src/AVX256_SHA256.cpp
-    src/WorkStealingScheduler.cpp
-    src/PuzzleOptimizer.cpp
+    main.cpp
+    SECP256k1.cpp
+    AVX256_SHA256.cpp
+    WorkStealingScheduler.cpp
+    PuzzleOptimizer.cpp
 )
 
 if(WITH_GPU)
     list(APPEND SOURCES
-        src/GPUEngine.cpp
-        src/GPUMemoryManager.cpp
+        GPUEngine.cpp
+        GPUMemoryManager.cpp
     )
 endif()
 
