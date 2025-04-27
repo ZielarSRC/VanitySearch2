@@ -1,7 +1,7 @@
 /*
  * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
  * Copyright (c) 2019 Jean Luc PONS.
- *
+ * Refactored in 2025 by Zielar
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, version 3.
@@ -15,45 +15,60 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-// ---------------------------------------------------------------------------------
-// Wildcard matcher
-// ---------------------------------------------------------------------------------
+#pragma once
 
-__device__ __noinline__ bool _Match(const char *str, const char *pattern) {
+namespace GPUWildcard {
 
-  const char *s;
-  const char *p;
-  bool star = false;
+/**
+ * @brief Matches a string against a wildcard pattern
+ * @param str The input string to match
+ * @param pattern The wildcard pattern (supports * and ?)
+ * @return true if the string matches the pattern, false otherwise
+ */
+__device__ __noinline__ bool Match(const char* str, const char* pattern) {
+    const char* str_ptr;
+    const char* pattern_ptr;
+    bool star = false;
 
-loopStart:
-  for (s = str, p = pattern; *s; ++s, ++p) {
+    while (true) {
+        // Reset pointers for new matching attempt
+        str_ptr = str;
+        pattern_ptr = pattern;
 
-    switch (*p) {
-    case '?':
-      if (*s == '.') goto starCheck;
-      break;
+        // Match characters until end of string
+        while (*str_ptr) {
+            switch (*pattern_ptr) {
+                case '?':
+                    if (*str_ptr == '.') goto handle_star;
+                    break;
 
-    case '*':
-      star = true;
-      str = s, pattern = p;
-      if (!*++pattern) return true;
-      goto loopStart;
+                case '*':
+                    star = true;
+                    str = str_ptr;
+                    pattern = pattern_ptr;
+                    if (!*++pattern) return true;
+                    goto continue_outer_loop;
 
-    default:
-      //if (mapCaseTable[*s] != mapCaseTable[*p])
-      if (*s != *p)
-        goto starCheck;
-      break;
-    } /* endswitch */
+                default:
+                    if (*str_ptr != *pattern_ptr)
+                        goto handle_star;
+                    break;
+            }
+            ++str_ptr;
+            ++pattern_ptr;
+        }
 
-  } /* endfor */
+        // Handle trailing star
+        if (*pattern_ptr == '*') ++pattern_ptr;
+        return (!*pattern_ptr);
 
-  if (*p == '*') ++p;
-  return (!*p);
+    handle_star:
+        if (!star) return false;
+        ++str;
 
-starCheck:
-  if (!star) return false;
-  str++;
-  goto loopStart;
-
+    continue_outer_loop:
+        continue;
+    }
 }
+
+} // namespace GPUWildcard
