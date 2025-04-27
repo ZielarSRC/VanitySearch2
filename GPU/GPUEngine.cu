@@ -1,34 +1,8 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#ifndef WIN64
-#include <unistd.h>
-#include <stdio.h>
-#endif
-
 #include "GPUEngine.h"
-#include <cuda.h>
 #include <cuda_runtime.h>
-
-#include <stdint.h>
-#include "../hash/sha256.h"
-#include "../hash/ripemd160.h"
+#include <memory>
+#include <stdexcept>
 #include "../Timer.h"
-
 #include "GPUGroup.h"
 #include "GPUMath.h"
 #include "GPUHash.h"
@@ -36,809 +10,620 @@
 #include "GPUWildcard.h"
 #include "GPUCompute.h"
 
-// ---------------------------------------------------------------------------------------
+namespace GPUEngine {
 
-__global__ void comp_keys(uint32_t mode,prefix_t *prefix, uint32_t *lookup32, uint64_t *keys, uint32_t maxFound, uint32_t *found) {
+    namespace {
+        constexpr const char* CUDA_ERROR_PREFIX = "CUDA error: ";
 
-  int xPtr = (blockIdx.x*blockDim.x) * 8;
-  int yPtr = xPtr + 4 * blockDim.x;
-  ComputeKeys(mode, keys + xPtr, keys + yPtr, prefix, lookup32, maxFound, found);
+        void CheckCudaError(cudaError_t err, const char* context) {
+            if (err != cudaSuccess) {
+                throw std::runtime_error(std::string(CUDA_ERROR_PREFIX) + 
+                       context + ": " + cudaGetErrorString(err));
+            }
+        }
 
-}
+        int ConvertSMVerToCores(int major, int minor) {
+            struct SMToCores {
+                int version;
+                int cores;
+            };
 
-__global__ void comp_keys_p2sh(uint32_t mode, prefix_t *prefix, uint32_t *lookup32, uint64_t *keys, uint32_t maxFound, uint32_t *found) {
+            const SMToCores archCoresPerSM[] = {
+                {0x20, 32}, {0x21, 48}, {0x30, 192}, {0x32, 192},
+                {0x35, 192}, {0x37, 192}, {0x50, 128}, {0x52, 128},
+                {0x53, 128}, {0x60, 64}, {0x61, 128}, {0x62, 128},
+                {0x70, 64}, {0x72, 64}, {0x75, 64}, {0x80, 64},
+                {0x86, 128}, {-1, -1}
+            };
 
-  int xPtr = (blockIdx.x*blockDim.x) * 8;
-  int yPtr = xPtr + 4 * blockDim.x;
-  ComputeKeysP2SH(mode, keys + xPtr, keys + yPtr, prefix, lookup32, maxFound, found);
-
-}
-
-__global__ void comp_keys_comp(prefix_t *prefix, uint32_t *lookup32, uint64_t *keys, uint32_t maxFound, uint32_t *found) {
-
-  int xPtr = (blockIdx.x*blockDim.x) * 8;
-  int yPtr = xPtr + 4 * blockDim.x;
-  ComputeKeysComp(keys + xPtr, keys + yPtr, prefix, lookup32, maxFound, found);
-
-}
-
-__global__ void comp_keys_pattern(uint32_t mode, prefix_t *pattern, uint64_t *keys,  uint32_t maxFound, uint32_t *found) {
-
-  int xPtr = (blockIdx.x*blockDim.x) * 8;
-  int yPtr = xPtr + 4 * blockDim.x;
-  ComputeKeys(mode, keys + xPtr, keys + yPtr, NULL, (uint32_t *)pattern, maxFound, found);
-
-}
-
-__global__ void comp_keys_p2sh_pattern(uint32_t mode, prefix_t *pattern, uint64_t *keys, uint32_t maxFound, uint32_t *found) {
-
-  int xPtr = (blockIdx.x*blockDim.x) * 8;
-  int yPtr = xPtr + 4 * blockDim.x;
-  ComputeKeysP2SH(mode, keys + xPtr, keys + yPtr, NULL, (uint32_t *)pattern, maxFound, found);
-
-}
-
-//#define FULLCHECK
-#ifdef FULLCHECK
-
-// ---------------------------------------------------------------------------------------
-
-__global__ void chekc_mult(uint64_t *a, uint64_t *b, uint64_t *r) {
-
-  _ModMult(r, a, b);
-  r[4]=0;
-
-}
-
-// ---------------------------------------------------------------------------------------
-
-__global__ void chekc_hash160(uint64_t *x, uint64_t *y, uint32_t *h) {
-
-  _GetHash160(x, y, (uint8_t *)h);
-  _GetHash160Comp(x, y, (uint8_t *)(h+5));
-
-}
-
-// ---------------------------------------------------------------------------------------
-
-__global__ void get_endianness(uint32_t *endian) {
-
-  uint32_t a = 0x01020304;
-  uint8_t fb = *(uint8_t *)(&a);
-  *endian = (fb==0x04);
-
-}
-
-#endif //FULLCHECK
-
-// ---------------------------------------------------------------------------------------
-
-using namespace std;
-
-std::string toHex(unsigned char *data, int length) {
-
-  string ret;
-  char tmp[3];
-  for (int i = 0; i < length; i++) {
-    if (i && i % 4 == 0) ret.append(" ");
-    sprintf(tmp, "%02x", (int)data[i]);
-    ret.append(tmp);
-  }
-  return ret;
-
-}
-
-int _ConvertSMVer2Cores(int major, int minor) {
-
-  // Defines for GPU Architecture types (using the SM version to determine
-  // the # of cores per SM
-  typedef struct {
-    int SM;  // 0xMm (hexidecimal notation), M = SM Major version,
-    // and m = SM minor version
-    int Cores;
-  } sSMtoCores;
-
-  sSMtoCores nGpuArchCoresPerSM[] = {
-      {0x20, 32}, // Fermi Generation (SM 2.0) GF100 class
-      {0x21, 48}, // Fermi Generation (SM 2.1) GF10x class
-      {0x30, 192},
-      {0x32, 192},
-      {0x35, 192},
-      {0x37, 192},
-      {0x50, 128},
-      {0x52, 128},
-      {0x53, 128},
-      {0x60,  64},
-      {0x61, 128},
-      {0x62, 128},
-      {0x70,  64},
-      {0x72,  64},
-      {0x75,  64},
-      {0x80,  64},
-      {0x86, 128},
-      {-1, -1} };
-
-  int index = 0;
-
-  while (nGpuArchCoresPerSM[index].SM != -1) {
-    if (nGpuArchCoresPerSM[index].SM == ((major << 4) + minor)) {
-      return nGpuArchCoresPerSM[index].Cores;
+            const int version = (major << 4) + minor;
+            for (const auto& entry : archCoresPerSM) {
+                if (entry.version == version) {
+                    return entry.cores;
+                }
+            }
+            return 0;
+        }
     }
 
-    index++;
-  }
+    Engine::Engine(int threadGroups, int threadsPerGroup, int gpuId, 
+                  uint32_t maxFound, bool rekey) 
+        : totalThreads_(0), threadsPerGroup_(threadsPerGroup),
+          initialized_(false), rekeyEnabled_(rekey), maxFound_(maxFound),
+          hasPattern_(false) {
+        
+        try {
+            int deviceCount = 0;
+            CheckCudaError(cudaGetDeviceCount(&deviceCount), "Get device count");
 
-  return 0;
+            if (deviceCount == 0) {
+                throw std::runtime_error("No CUDA-capable devices available");
+            }
 
-}
+            CheckCudaError(cudaSetDevice(gpuId), "Set device");
 
-GPUEngine::GPUEngine(int nbThreadGroup, int nbThreadPerGroup, int gpuId, uint32_t maxFound,bool rekey) {
+            cudaDeviceProp props;
+            CheckCudaError(cudaGetDeviceProperties(&props, gpuId), "Get device properties");
 
-  // Initialise CUDA
-  this->rekey = rekey;
-  this->nbThreadPerGroup = nbThreadPerGroup;
-  initialised = false;
-  cudaError_t err;
+            if (threadGroups == -1) {
+                threadGroups = props.multiProcessorCount * 8;
+            }
 
-  int deviceCount = 0;
-  cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
+            totalThreads_ = threadGroups * threadsPerGroup;
+            outputSize_ = (maxFound * ITEM_SIZE + 4);
 
-  if (error_id != cudaSuccess) {
-    printf("GPUEngine: CudaGetDeviceCount %s %d\n", cudaGetErrorString(error_id),error_id);
-    return;
-  }
+            char buffer[512];
+            snprintf(buffer, sizeof(buffer),
+                    "GPU #%d %s (%dx%d cores) Grid(%dx%d)",
+                    gpuId, props.name, props.multiProcessorCount,
+                    ConvertSMVerToCores(props.major, props.minor),
+                    totalThreads_ / threadsPerGroup, threadsPerGroup);
+            deviceName_ = buffer;
 
-  // This function call returns 0 if there are no CUDA capable devices.
-  if (deviceCount == 0) {
-    printf("GPUEngine: There are no available device(s) that support CUDA\n");
-    return;
-  }
+            // Configure device
+            CheckCudaError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1), "Set cache config");
+            CheckCudaError(cudaDeviceSetLimit(cudaLimitStackSize, 49152), "Set stack size");
 
-  err = cudaSetDevice(gpuId);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: %s\n", cudaGetErrorString(err));
-    return;
-  }
+            // Allocate device memory
+            CheckCudaError(cudaMalloc(&devicePrefixes_, _64K * 2), "Allocate prefixes");
+            CheckCudaError(cudaHostAlloc(&hostPrefixes_, _64K * 2, 
+                          cudaHostAllocWriteCombined | cudaHostAllocMapped), 
+                          "Allocate pinned prefixes");
+            
+            CheckCudaError(cudaMalloc(&deviceKeys_, totalThreads_ * 32 * 2), "Allocate keys");
+            CheckCudaError(cudaHostAlloc(&hostKeys_, totalThreads_ * 32 * 2,
+                          cudaHostAllocWriteCombined | cudaHostAllocMapped),
+                          "Allocate pinned keys");
 
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, gpuId);
+            CheckCudaError(cudaMalloc(&deviceOutput_, outputSize_), "Allocate output");
+            CheckCudaError(cudaHostAlloc(&hostOutput_, outputSize_, cudaHostAllocMapped),
+                          "Allocate pinned output");
 
-  if (nbThreadGroup == -1)
-    nbThreadGroup = deviceProp.multiProcessorCount * 8;
+            searchMode_ = SearchMode::Compressed;
+            searchType_ = SearchType::P2PKH;
+            initialized_ = true;
 
-  this->nbThread = nbThreadGroup * nbThreadPerGroup;
-  this->maxFound = maxFound;
-  this->outputSize = (maxFound*ITEM_SIZE + 4);
-
-  char tmp[512];
-  sprintf(tmp,"GPU #%d %s (%dx%d cores) Grid(%dx%d)",
-  gpuId,deviceProp.name,deviceProp.multiProcessorCount,
-  _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor),
-                      nbThread / nbThreadPerGroup,
-                      nbThreadPerGroup);
-  deviceName = std::string(tmp);
-
-  // Prefer L1 (We do not use __shared__ at all)
-  err = cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: %s\n", cudaGetErrorString(err));
-    return;
-  }
-
-  size_t stackSize = 49152;
-  err = cudaDeviceSetLimit(cudaLimitStackSize, stackSize);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: %s\n", cudaGetErrorString(err));
-    return;
-  }
-
-  /*
-  size_t heapSize = ;
-  err = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize);
-  if (err != cudaSuccess) {
-    printf("Error: %s\n", cudaGetErrorString(err));
-    exit(0);
-  }
-
-  size_t size;
-  cudaDeviceGetLimit(&size, cudaLimitStackSize);
-  printf("Stack Size %lld\n", size);
-  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
-  printf("Heap Size %lld\n", size);
-  */
-
-  // Allocate memory
-  err = cudaMalloc((void **)&inputPrefix, _64K * 2);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate prefix memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaHostAlloc(&inputPrefixPinned, _64K * 2, cudaHostAllocWriteCombined | cudaHostAllocMapped);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate prefix pinned memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaMalloc((void **)&inputKey, nbThread * 32 * 2);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate input memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaHostAlloc(&inputKeyPinned, nbThread * 32 * 2, cudaHostAllocWriteCombined | cudaHostAllocMapped);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate input pinned memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaMalloc((void **)&outputPrefix, outputSize);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate output memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaHostAlloc(&outputPrefixPinned, outputSize, cudaHostAllocMapped);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate output pinned memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-
-  searchMode = SEARCH_COMPRESSED;
-  searchType = P2PKH;
-  initialised = true;
-  pattern = "";
-  hasPattern = false;
-  inputPrefixLookUp = NULL;
-
-}
-
-int GPUEngine::GetGroupSize() {
-  return GRP_SIZE;
-}
-
-void GPUEngine::PrintCudaInfo() {
-
-  cudaError_t err;
-
-  const char *sComputeMode[] =
-  {
-    "Multiple host threads",
-    "Only one host thread",
-    "No host thread",
-    "Multiple process threads",
-    "Unknown",
-     NULL
-  };
-
-  int deviceCount = 0;
-  cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
-
-  if (error_id != cudaSuccess) {
-    printf("GPUEngine: CudaGetDeviceCount %s\n", cudaGetErrorString(error_id));
-    return;
-  }
-
-  // This function call returns 0 if there are no CUDA capable devices.
-  if (deviceCount == 0) {
-    printf("GPUEngine: There are no available device(s) that support CUDA\n");
-    return;
-  }
-
-  for(int i=0;i<deviceCount;i++) {
-
-    err = cudaSetDevice(i);
-    if (err != cudaSuccess) {
-      printf("GPUEngine: cudaSetDevice(%d) %s\n", i, cudaGetErrorString(err));
-      return;
+        } catch (const std::exception& e) {
+            Cleanup();
+            throw;
+        }
     }
 
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, i);
-    printf("GPU #%d %s (%dx%d cores) (Cap %d.%d) (%.1f MB) (%s)\n",
-      i,deviceProp.name,deviceProp.multiProcessorCount,
-      _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor),
-      deviceProp.major, deviceProp.minor,(double)deviceProp.totalGlobalMem/1048576.0,
-      sComputeMode[deviceProp.computeMode]);
-
-  }
-
-}
-
-GPUEngine::~GPUEngine() {
-
-  cudaFree(inputKey);
-  cudaFree(inputPrefix);
-  if(inputPrefixLookUp) cudaFree(inputPrefixLookUp);
-  cudaFreeHost(outputPrefixPinned);
-  cudaFree(outputPrefix);
-
-}
-
-int GPUEngine::GetNbThread() {
-  return nbThread;
-}
-
-void GPUEngine::SetSearchMode(int searchMode) {
-  this->searchMode = searchMode;
-}
-
-void GPUEngine::SetSearchType(int searchType) {
-  this->searchType = searchType;
-}
-
-void GPUEngine::SetPrefix(std::vector<prefix_t> prefixes) {
-
-  memset(inputPrefixPinned, 0, _64K * 2);
-  for(int i=0;i<(int)prefixes.size();i++)
-    inputPrefixPinned[prefixes[i]]=1;
-
-  // Fill device memory
-  cudaMemcpy(inputPrefix, inputPrefixPinned, _64K * 2, cudaMemcpyHostToDevice);
-
-  // We do not need the input pinned memory anymore
-  cudaFreeHost(inputPrefixPinned);
-  inputPrefixPinned = NULL;
-  lostWarning = false;
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: SetPrefix: %s\n", cudaGetErrorString(err));
-  }
-
-}
-
-void GPUEngine::SetPattern(const char *pattern) {
-
-  strcpy((char *)inputPrefixPinned,pattern);
-
-  // Fill device memory
-  cudaMemcpy(inputPrefix, inputPrefixPinned, _64K * 2, cudaMemcpyHostToDevice);
-
-  // We do not need the input pinned memory anymore
-  cudaFreeHost(inputPrefixPinned);
-  inputPrefixPinned = NULL;
-  lostWarning = false;
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: SetPattern: %s\n", cudaGetErrorString(err));
-  }
-
-  hasPattern = true;
-
-}
-
-void GPUEngine::SetPrefix(std::vector<LPREFIX> prefixes, uint32_t totalPrefix) {
-
-  // Allocate memory for the second level of lookup tables
-  cudaError_t err = cudaMalloc((void **)&inputPrefixLookUp, (_64K+totalPrefix) * 4);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate prefix lookup memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-  err = cudaHostAlloc(&inputPrefixLookUpPinned, (_64K+totalPrefix) * 4, cudaHostAllocWriteCombined | cudaHostAllocMapped);
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Allocate prefix lookup pinned memory: %s\n", cudaGetErrorString(err));
-    return;
-  }
-
-  uint32_t offset = _64K;
-  memset(inputPrefixPinned, 0, _64K * 2);
-  memset(inputPrefixLookUpPinned, 0, _64K * 4);
-  for (int i = 0; i < (int)prefixes.size(); i++) {
-    int nbLPrefix = (int)prefixes[i].lPrefixes.size();
-    inputPrefixPinned[prefixes[i].sPrefix] = (uint16_t)nbLPrefix;
-    inputPrefixLookUpPinned[prefixes[i].sPrefix] = offset;
-    for (int j = 0; j < nbLPrefix; j++) {
-      inputPrefixLookUpPinned[offset++]=prefixes[i].lPrefixes[j];
-    }
-  }
-
-  if (offset != (_64K+totalPrefix)) {
-    printf("GPUEngine: Wrong totalPrefix %d!=%d!\n",offset- _64K, totalPrefix);
-    return;
-  }
-
-  // Fill device memory
-  cudaMemcpy(inputPrefix, inputPrefixPinned, _64K * 2, cudaMemcpyHostToDevice);
-  cudaMemcpy(inputPrefixLookUp, inputPrefixLookUpPinned, (_64K+totalPrefix) * 4, cudaMemcpyHostToDevice);
-
-  // We do not need the input pinned memory anymore
-  cudaFreeHost(inputPrefixPinned);
-  inputPrefixPinned = NULL;
-  cudaFreeHost(inputPrefixLookUpPinned);
-  inputPrefixLookUpPinned = NULL;
-  lostWarning = false;
-
-  err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: SetPrefix (large): %s\n", cudaGetErrorString(err));
-  }
-
-}
-
-bool GPUEngine::callKernel() {
-
-  // Reset nbFound
-  cudaMemset(outputPrefix,0,4);
-
-  // Call the kernel (Perform STEP_SIZE keys per thread)
-  if (searchType == P2SH) {
-
-    if (hasPattern) {
-      comp_keys_p2sh_pattern << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
-        (searchMode, inputPrefix, inputKey, maxFound, outputPrefix);
-    } else {
-      comp_keys_p2sh << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
-        (searchMode, inputPrefix, inputPrefixLookUp, inputKey, maxFound, outputPrefix);
+    void Engine::Cleanup() {
+        if (deviceKeys_) cudaFree(deviceKeys_);
+        if (devicePrefixes_) cudaFree(devicePrefixes_);
+        if (devicePrefixLookup_) cudaFree(devicePrefixLookup_);
+        if (hostOutput_) cudaFreeHost(hostOutput_);
+        if (deviceOutput_) cudaFree(deviceOutput_);
+        if (hostPrefixes_) cudaFreeHost(hostPrefixes_);
+        if (hostKeys_) cudaFreeHost(hostKeys_);
+        if (hostPrefixLookup_) cudaFreeHost(hostPrefixLookup_);
     }
 
-  } else {
+    Engine::~Engine() {
+        Cleanup();
+    }
 
-    // P2PKH or BECH32
-    if (hasPattern) {
-      if (searchType == BECH32) {
-        // TODO
-        printf("GPUEngine: (TODO) BECH32 not yet supported with wildard\n");
+        void Engine::SetPrefixes(const std::vector<PrefixT>& prefixes) {
+        if (!initialized_) {
+            throw std::runtime_error("Engine not initialized");
+        }
+
+        std::memset(hostPrefixes_, 0, _64K * 2);
+        for (const auto prefix : prefixes) {
+            hostPrefixes_[prefix] = 1;
+        }
+
+        CheckCudaError(cudaMemcpy(devicePrefixes_, hostPrefixes_, _64K * 2, cudaMemcpyHostToDevice),
+                      "Copy prefixes to device");
+
+        if (!rekeyEnabled_) {
+            cudaFreeHost(hostPrefixes_);
+            hostPrefixes_ = nullptr;
+        }
+
+        lostWarning_ = false;
+    }
+
+    void Engine::SetPrefixes(const std::vector<LPrefix>& prefixes, uint32_t totalPrefix) {
+        if (!initialized_) {
+            throw std::runtime_error("Engine not initialized");
+        }
+
+        // Allocate lookup memory
+        CheckCudaError(cudaMalloc(&devicePrefixLookup_, (_64K + totalPrefix) * 4),
+                      "Allocate prefix lookup");
+        CheckCudaError(cudaHostAlloc(&hostPrefixLookup_, (_64K + totalPrefix) * 4,
+                      cudaHostAllocWriteCombined | cudaHostAllocMapped),
+                      "Allocate pinned prefix lookup");
+
+        std::memset(hostPrefixes_, 0, _64K * 2);
+        std::memset(hostPrefixLookup_, 0, _64K * 4);
+
+        uint32_t offset = _64K;
+        for (const auto& prefix : prefixes) {
+            int count = static_cast<int>(prefix.longPrefixes.size());
+            hostPrefixes_[prefix.shortPrefix] = static_cast<PrefixT>(count);
+            hostPrefixLookup_[prefix.shortPrefix] = offset;
+            
+            for (const auto longPrefix : prefix.longPrefixes) {
+                hostPrefixLookup_[offset++] = longPrefix;
+            }
+        }
+
+        if (offset != (_64K + totalPrefix)) {
+            throw std::runtime_error("Mismatch in total prefix count");
+        }
+
+        // Copy to device
+        CheckCudaError(cudaMemcpy(devicePrefixes_, hostPrefixes_, _64K * 2, cudaMemcpyHostToDevice),
+                      "Copy prefixes to device");
+        CheckCudaError(cudaMemcpy(devicePrefixLookup_, hostPrefixLookup_, 
+                      (_64K + totalPrefix) * 4, cudaMemcpyHostToDevice),
+                      "Copy prefix lookup to device");
+
+        // Free host memory
+        cudaFreeHost(hostPrefixes_);
+        hostPrefixes_ = nullptr;
+        cudaFreeHost(hostPrefixLookup_);
+        hostPrefixLookup_ = nullptr;
+        
+        lostWarning_ = false;
+    }
+
+    void Engine::SetPattern(const std::string& pattern) {
+        if (!initialized_) {
+            throw std::runtime_error("Engine not initialized");
+        }
+
+        if (pattern.size() >= _64K * 2) {
+            throw std::runtime_error("Pattern too large");
+        }
+
+        std::memcpy(hostPrefixes_, pattern.data(), pattern.size());
+        CheckCudaError(cudaMemcpy(devicePrefixes_, hostPrefixes_, _64K * 2, cudaMemcpyHostToDevice),
+                      "Copy pattern to device");
+
+        cudaFreeHost(hostPrefixes_);
+        hostPrefixes_ = nullptr;
+        
+        lostWarning_ = false;
+        hasPattern_ = true;
+        searchPattern_ = pattern;
+    }
+
+    bool Engine::SetKeys(const std::vector<Point>& points) {
+        if (!initialized_) {
+            return false;
+        }
+
+        if (points.size() < static_cast<size_t>(totalThreads_)) {
+            throw std::runtime_error("Insufficient points for threads");
+        }
+
+        for (int i = 0; i < totalThreads_; i += threadsPerGroup_) {
+            for (int j = 0; j < threadsPerGroup_; j++) {
+                const auto& point = points[i + j];
+                const int baseIdx = 8 * i + j;
+
+                hostKeys_[baseIdx + 0 * threadsPerGroup_] = point.x.bits64[0];
+                hostKeys_[baseIdx + 1 * threadsPerGroup_] = point.x.bits64[1];
+                hostKeys_[baseIdx + 2 * threadsPerGroup_] = point.x.bits64[2];
+                hostKeys_[baseIdx + 3 * threadsPerGroup_] = point.x.bits64[3];
+                hostKeys_[baseIdx + 4 * threadsPerGroup_] = point.y.bits64[0];
+                hostKeys_[baseIdx + 5 * threadsPerGroup_] = point.y.bits64[1];
+                hostKeys_[baseIdx + 6 * threadsPerGroup_] = point.y.bits64[2];
+                hostKeys_[baseIdx + 7 * threadsPerGroup_] = point.y.bits64[3];
+            }
+        }
+
+        CheckCudaError(cudaMemcpy(deviceKeys_, hostKeys_, totalThreads_ * 32 * 2, cudaMemcpyHostToDevice),
+                      "Copy keys to device");
+
+        if (!rekeyEnabled_) {
+            cudaFreeHost(hostKeys_);
+            hostKeys_ = nullptr;
+        }
+
+        return CallKernel();
+    }
+
+    bool Engine::CallKernel() {
+        if (!initialized_) {
+            return false;
+        }
+
+        // Reset found count
+        CheckCudaError(cudaMemset(deviceOutput_, 0, 4), "Reset output buffer");
+
+        const dim3 grid(totalThreads_ / threadsPerGroup_);
+        const dim3 block(threadsPerGroup_);
+
+        if (searchType_ == SearchType::P2SH) {
+            if (hasPattern_) {
+                comp_keys_p2sh_pattern<<<grid, block>>>(
+                    static_cast<uint32_t>(searchMode_),
+                    devicePrefixes_,
+                    deviceKeys_,
+                    maxFound_,
+                    deviceOutput_);
+            } else {
+                comp_keys_p2sh<<<grid, block>>>(
+                    static_cast<uint32_t>(searchMode_),
+                    devicePrefixes_,
+                    devicePrefixLookup_,
+                    deviceKeys_,
+                    maxFound_,
+                    deviceOutput_);
+            }
+        } else {
+            if (hasPattern_) {
+                if (searchType_ == SearchType::BECH32) {
+                    throw std::runtime_error("BECH32 not yet supported with wildcard");
+                }
+                comp_keys_pattern<<<grid, block>>>(
+                    static_cast<uint32_t>(searchMode_),
+                    devicePrefixes_,
+                    deviceKeys_,
+                    maxFound_,
+                    deviceOutput_);
+            } else {
+                if (searchMode_ == SearchMode::Compressed) {
+                    comp_keys_comp<<<grid, block>>>(
+                        devicePrefixes_,
+                        devicePrefixLookup_,
+                        deviceKeys_,
+                        maxFound_,
+                        deviceOutput_);
+                } else {
+                    comp_keys<<<grid, block>>>(
+                        static_cast<uint32_t>(searchMode_),
+                        devicePrefixes_,
+                        devicePrefixLookup_,
+                        deviceKeys_,
+                        maxFound_,
+                        deviceOutput_);
+                }
+            }
+        }
+
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            throw std::runtime_error(std::string("Kernel launch failed: ") + cudaGetErrorString(err));
+        }
+
+        return true;
+    }
+
+    bool Engine::Launch(std::vector<Item>& foundItems, bool spinWait) {
+        if (!initialized_) {
+            return false;
+        }
+
+        foundItems.clear();
+
+        if (spinWait) {
+            CheckCudaError(cudaMemcpy(hostOutput_, deviceOutput_, outputSize_, cudaMemcpyDeviceToHost),
+                          "Copy output (spin wait)");
+        } else {
+            cudaEvent_t event;
+            CheckCudaError(cudaEventCreate(&event), "Create event");
+            CheckCudaError(cudaMemcpyAsync(hostOutput_, deviceOutput_, 4, cudaMemcpyDeviceToHost, 0),
+                          "Async copy output");
+            CheckCudaError(cudaEventRecord(event, 0), "Record event");
+
+            while (cudaEventQuery(event) == cudaErrorNotReady) {
+                Timer::SleepMillis(1);
+            }
+            CheckCudaError(cudaEventDestroy(event), "Destroy event");
+        }
+
+        uint32_t foundCount = hostOutput_[0];
+        if (foundCount > maxFound_) {
+            if (!lostWarning_) {
+                printf("\nWarning, %d items lost\nHint: Search with less prefixes, less threads (-g) or increase maxFound (-m)\n",
+                      (foundCount - maxFound_));
+                lostWarning_ = true;
+            }
+            foundCount = maxFound_;
+        }
+
+        if (foundCount > 0) {
+            CheckCudaError(cudaMemcpy(hostOutput_, deviceOutput_, foundCount * ITEM_SIZE + 4, cudaMemcpyDeviceToHost),
+                          "Copy found items");
+
+            foundItems.reserve(foundCount);
+            for (uint32_t i = 0; i < foundCount; i++) {
+                uint32_t* itemPtr = hostOutput_ + (i * ITEM_SIZE32 + 1);
+                Item item;
+                item.threadId = itemPtr[0];
+                const int16_t* ptr = reinterpret_cast<int16_t*>(&itemPtr[1]);
+                item.endomorphism = ptr[0] & 0x7FFF;
+                item.mode = (ptr[0] & 0x8000) != 0;
+                item.increment = ptr[1];
+                item.hash = reinterpret_cast<uint8_t*>(itemPtr + 2);
+                foundItems.push_back(item);
+            }
+        }
+
+        return CallKernel();
+    }
+
+    bool Engine::CheckHash(const uint8_t* hash, std::vector<Item>& foundItems,
+                         int threadId, int increment, int endomorphism, int* okCount) {
+        auto it = std::find_if(foundItems.begin(), foundItems.end(),
+            [hash](const Item& item) {
+                return ripemd160_comp_hash(item.hash, hash);
+            });
+
+        if (it != foundItems.end()) {
+            foundItems.erase(it);
+            (*okCount)++;
+            return true;
+        }
+
+        printf("Expected item not found %s (thread=%d, incr=%d, endo=%d)\n",
+               toHex(hash, 20).c_str(), threadId, increment, endomorphism);
         return false;
-      }
-      comp_keys_pattern << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
-        (searchMode, inputPrefix, inputKey, maxFound, outputPrefix);
-    } else {
-      if (searchMode == SEARCH_COMPRESSED) {
-        comp_keys_comp << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
-          (inputPrefix, inputPrefixLookUp, inputKey, maxFound, outputPrefix);
-      } else {
-        comp_keys << < nbThread / nbThreadPerGroup, nbThreadPerGroup >> >
-          (searchMode, inputPrefix, inputPrefixLookUp, inputKey, maxFound, outputPrefix);
-      }
     }
 
-  }
+    bool Engine::Check(Secp256K1* secp) {
+        if (!initialized_) {
+            return false;
+        }
 
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Kernel: %s\n", cudaGetErrorString(err));
-    return false;
-  }
-  return true;
-
-}
-
-bool GPUEngine::SetKeys(Point *p) {
-
-  // Sets the starting keys for each thread
-  // p must contains nbThread public keys
-  for (int i = 0; i < nbThread; i+= nbThreadPerGroup) {
-    for (int j = 0; j < nbThreadPerGroup; j++) {
-
-      inputKeyPinned[8*i + j + 0* nbThreadPerGroup] = p[i + j].x.bits64[0];
-      inputKeyPinned[8*i + j + 1* nbThreadPerGroup] = p[i + j].x.bits64[1];
-      inputKeyPinned[8*i + j + 2* nbThreadPerGroup] = p[i + j].x.bits64[2];
-      inputKeyPinned[8*i + j + 3* nbThreadPerGroup] = p[i + j].x.bits64[3];
-
-      inputKeyPinned[8*i + j + 4* nbThreadPerGroup] = p[i + j].y.bits64[0];
-      inputKeyPinned[8*i + j + 5* nbThreadPerGroup] = p[i + j].y.bits64[1];
-      inputKeyPinned[8*i + j + 6* nbThreadPerGroup] = p[i + j].y.bits64[2];
-      inputKeyPinned[8*i + j + 7* nbThreadPerGroup] = p[i + j].y.bits64[3];
-
-    }
-  }
-
-  // Fill device memory
-  cudaMemcpy(inputKey, inputKeyPinned, nbThread*32*2, cudaMemcpyHostToDevice);
-
-  if (!rekey) {
-    // We do not need the input pinned memory anymore
-    cudaFreeHost(inputKeyPinned);
-    inputKeyPinned = NULL;
-  }
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: SetKeys: %s\n", cudaGetErrorString(err));
-  }
-
-  return callKernel();
-
-}
-
-bool GPUEngine::Launch(std::vector<ITEM> &prefixFound,bool spinWait) {
-
-
-  prefixFound.clear();
-
-  // Get the result
-
-  if(spinWait) {
-
-    cudaMemcpy(outputPrefixPinned, outputPrefix, outputSize, cudaMemcpyDeviceToHost);
-
-  } else {
-
-    // Use cudaMemcpyAsync to avoid default spin wait of cudaMemcpy wich takes 100% CPU
-    cudaEvent_t evt;
-    cudaEventCreate(&evt);
-    cudaMemcpyAsync(outputPrefixPinned, outputPrefix, 4, cudaMemcpyDeviceToHost, 0);
-    cudaEventRecord(evt, 0);
-    while (cudaEventQuery(evt) == cudaErrorNotReady) {
-      // Sleep 1 ms to free the CPU
-      Timer::SleepMillis(1);
-    }
-    cudaEventDestroy(evt);
-
-  }
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: Launch: %s\n", cudaGetErrorString(err));
-    return false;
-  }
-
-  // Look for prefix found
-  uint32_t nbFound = outputPrefixPinned[0];
-  if (nbFound > maxFound) {
-    // prefix has been lost
-    if (!lostWarning) {
-      printf("\nWarning, %d items lost\nHint: Search with less prefixes, less threads (-g) or increase maxFound (-m)\n", (nbFound - maxFound));
-      lostWarning = true;
-    }
-    nbFound = maxFound;
-  }
-
-  // When can perform a standard copy, the kernel is eneded
-  cudaMemcpy( outputPrefixPinned , outputPrefix , nbFound*ITEM_SIZE + 4 , cudaMemcpyDeviceToHost);
-
-  for (uint32_t i = 0; i < nbFound; i++) {
-    uint32_t *itemPtr = outputPrefixPinned + (i*ITEM_SIZE32 + 1);
-    ITEM it;
-    it.thId = itemPtr[0];
-    int16_t *ptr = (int16_t *)&(itemPtr[1]);
-    it.endo = ptr[0] & 0x7FFF;
-    it.mode = (ptr[0]&0x8000)!=0;
-    it.incr = ptr[1];
-    it.hash = (uint8_t *)(itemPtr + 2);
-    prefixFound.push_back(it);
-  }
-
-  return callKernel();
-
-}
-
-bool GPUEngine::CheckHash(uint8_t *h, vector<ITEM>& found,int tid,int incr,int endo, int *nbOK) {
-
-  bool ok = true;
-
-  // Search in found by GPU
-  bool f = false;
-  int l = 0;
-  //printf("Search: %s\n", toHex(h,20).c_str());
-  while (l < found.size() && !f) {
-    f = ripemd160_comp_hash(found[l].hash, h);
-    if (!f) l++;
-  }
-  if (f) {
-    found.erase(found.begin() + l);
-    *nbOK = *nbOK+1;
-  } else {
-    ok = false;
-    printf("Expected item not found %s (thread=%d, incr=%d, endo=%d)\n",
-      toHex(h, 20).c_str(),tid,incr,endo);
-  }
-
-  return ok;
-
-}
-
-bool GPUEngine::Check(Secp256K1 *secp) {
-
-  uint8_t h[20];
-  int i = 0;
-  int j = 0;
-  bool ok = true;
-
-  if(!initialised)
-    return false;
-
-  printf("GPU: %s\n",deviceName.c_str());
+        printf("GPU: %s\n", deviceName_.c_str());
 
 #ifdef FULLCHECK
+        // Verify endianness
+        get_endianness<<<1, 1>>>(deviceOutput_);
+        CheckCudaError(cudaGetLastError(), "Endianness check kernel");
+        CheckCudaError(cudaMemcpy(hostOutput_, deviceOutput_, 1, cudaMemcpyDeviceToHost),
+                      "Copy endianness result");
+        isLittleEndian_ = *hostOutput_ != 0;
+        printf("Endianness: %s\n", (isLittleEndian_ ? "Little" : "Big"));
 
-  // Get endianess
-  get_endianness<<<1,1>>>(outputPrefix);
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    printf("GPUEngine: get_endianness: %s\n", cudaGetErrorString(err));
-    return false;
-  }
-  cudaMemcpy(outputPrefixPinned, outputPrefix,1,cudaMemcpyDeviceToHost);
-  littleEndian = *outputPrefixPinned != 0;
-  printf("Endianness: %s\n",(littleEndian?"Little":"Big"));
+        // Verify modular multiplication
+        Int a, b, r, c;
+        a.Rand(256);
+        b.Rand(256);
+        c.ModMulK1(&a, &b);
+        
+        std::memcpy(hostKeys_, a.bits64, BIFULLSIZE);
+        std::memcpy(hostKeys_ + 5, b.bits64, BIFULLSIZE);
+        CheckCudaError(cudaMemcpy(deviceKeys_, hostKeys_, BIFULLSIZE * 2, cudaMemcpyHostToDevice),
+                      "Copy values for multiplication check");
 
-  // Check modular mult
-  Int a;
-  Int b;
-  Int r;
-  Int c;
-  a.Rand(256);
-  b.Rand(256);
-  c.ModMulK1(&a,&b);
-  memcpy(inputKeyPinned,a.bits64,BIFULLSIZE);
-  memcpy(inputKeyPinned+5,b.bits64,BIFULLSIZE);
-  cudaMemcpy(inputKey, inputKeyPinned, BIFULLSIZE*2, cudaMemcpyHostToDevice);
-  chekc_mult<<<1,1>>>(inputKey,inputKey+5,(uint64_t *)outputPrefix);
-  cudaMemcpy(outputPrefixPinned, outputPrefix, BIFULLSIZE, cudaMemcpyDeviceToHost);
-  memcpy(r.bits64,outputPrefixPinned,BIFULLSIZE);
+        chekc_mult<<<1, 1>>>(deviceKeys_, deviceKeys_ + 5, (uint64_t*)deviceOutput_);
+        CheckCudaError(cudaGetLastError(), "Multiplication check kernel");
+        CheckCudaError(cudaMemcpy(hostOutput_, deviceOutput_, BIFULLSIZE, cudaMemcpyDeviceToHost),
+                      "Copy multiplication result");
+        std::memcpy(r.bits64, hostOutput_, BIFULLSIZE);
 
-  if(!c.IsEqual(&r)) {
-    printf("\nModular Mult wrong:\nR=%s\nC=%s\n",
-    toHex((uint8_t *)r.bits64,BIFULLSIZE).c_str(),
-    toHex((uint8_t *)c.bits64,BIFULLSIZE).c_str());
-    return false;
-  }
+        if (!c.IsEqual(&r)) {
+            printf("\nModular Mult wrong:\nR=%s\nC=%s\n",
+                   toHex((uint8_t*)r.bits64, BIFULLSIZE).c_str(),
+                   toHex((uint8_t*)c.bits64, BIFULLSIZE).c_str());
+            return false;
+        }
 
-  // Check hash 160C
-  uint8_t hc[20];
-  Point pi;
-  pi.x.Rand(256);
-  pi.y.Rand(256);
-  secp.GetHash160(pi, false, h);
-  secp.GetHash160(pi, true, hc);
-  memcpy(inputKeyPinned,pi.x.bits64,BIFULLSIZE);
-  memcpy(inputKeyPinned+5,pi.y.bits64,BIFULLSIZE);
-  cudaMemcpy(inputKey, inputKeyPinned, BIFULLSIZE*2, cudaMemcpyHostToDevice);
-  chekc_hash160<<<1,1>>>(inputKey,inputKey+5,outputPrefix);
-  cudaMemcpy(outputPrefixPinned, outputPrefix, 64, cudaMemcpyDeviceToHost);
+        // Verify hash computation
+        uint8_t h[20], hc[20];
+        Point pi;
+        pi.x.Rand(256);
+        pi.y.Rand(256);
+        secp->GetHash160(pi, false, h);
+        secp->GetHash160(pi, true, hc);
 
-  if(!ripemd160_comp_hash((uint8_t *)outputPrefixPinned,h)) {
-    printf("\nGetHask160 wrong:\n%s\n%s\n",
-    toHex((uint8_t *)outputPrefixPinned,20).c_str(),
-    toHex(h,20).c_str());
-    return false;
-  }
-  if (!ripemd160_comp_hash((uint8_t *)(outputPrefixPinned+5), hc)) {
-    printf("\nGetHask160Comp wrong:\n%s\n%s\n",
-      toHex((uint8_t *)(outputPrefixPinned + 5), 20).c_str(),
-      toHex(h, 20).c_str());
-    return false;
-  }
+        std::memcpy(hostKeys_, pi.x.bits64, BIFULLSIZE);
+        std::memcpy(hostKeys_ + 5, pi.y.bits64, BIFULLSIZE);
+        CheckCudaError(cudaMemcpy(deviceKeys_, hostKeys_, BIFULLSIZE * 2, cudaMemcpyHostToDevice),
+                      "Copy values for hash check");
 
-#endif //FULLCHECK
+        chekc_hash160<<<1, 1>>>(deviceKeys_, deviceKeys_ + 5, deviceOutput_);
+        CheckCudaError(cudaGetLastError(), "Hash check kernel");
+        CheckCudaError(cudaMemcpy(hostOutput_, deviceOutput_, 64, cudaMemcpyDeviceToHost),
+                      "Copy hash results");
 
-  Point *p = new Point[nbThread];
-  Point *p2 = new Point[nbThread];
-  Int k;
+        if (!ripemd160_comp_hash((uint8_t*)hostOutput_, h)) {
+            printf("\nGetHash160 wrong:\n%s\n%s\n",
+                   toHex((uint8_t*)hostOutput_, 20).c_str(),
+                   toHex(h, 20).c_str());
+            return false;
+        }
 
-  // Check kernel
-  int nbFoundCPU[6];
-  int nbOK[6];
-  vector<ITEM> found;
-  bool searchComp;
+        if (!ripemd160_comp_hash((uint8_t*)(hostOutput_ + 5), hc)) {
+            printf("\nGetHash160Comp wrong:\n%s\n%s\n",
+                   toHex((uint8_t*)(hostOutput_ + 5), 20).c_str(),
+                   toHex(h, 20).c_str());
+            return false;
+        }
+#endif // FULLCHECK
 
-  if (searchMode == SEARCH_BOTH) {
-    printf("Warning, Check function does not support BOTH_MODE, use either compressed or uncompressed");
-    return true;
-  }
+        std::vector<Point> points(totalThreads_);
+        std::vector<Point> points2(totalThreads_);
+        Int k;
 
-  searchComp = (searchMode == SEARCH_COMPRESSED)?true:false;
+        if (searchMode_ == SearchMode::Both) {
+            printf("Warning, Check function does not support BOTH_MODE, use either compressed or uncompressed");
+            return true;
+        }
 
-  uint32_t seed = (uint32_t)time(NULL);
-  printf("Seed: %u\n",seed);
-  rseed(seed);
-  memset(nbOK,0,sizeof(nbOK));
-  memset(nbFoundCPU, 0, sizeof(nbFoundCPU));
-  for (int i = 0; i < nbThread; i++) {
-    k.Rand(256);
-    p[i] = secp->ComputePublicKey(&k);
-    // Group starts at the middle
-    k.Add((uint64_t)GRP_SIZE/2);
-    p2[i] = secp->ComputePublicKey(&k);
-  }
+        const bool searchComp = (searchMode_ == SearchMode::Compressed);
+        const uint32_t seed = static_cast<uint32_t>(time(nullptr));
+        printf("Seed: %u\n", seed);
+        rseed(seed);
 
-  std::vector<prefix_t> prefs;
-  prefs.push_back(0xFEFE);
-  prefs.push_back(0x1234);
-  SetPrefix(prefs);
-  SetKeys(p2);
-  double t0 = Timer::get_tick();
-  Launch(found,true);
-  double t1 = Timer::get_tick();
-  Timer::printResult((char *)"Key", 6*STEP_SIZE*nbThread, t0, t1);
+        int nbOK[6] = {0};
+        int nbFoundCPU[6] = {0};
+        std::vector<Item> foundItems;
 
-  //for (int i = 0; i < found.size(); i++) {
-  //  printf("[%d]: thId=%d incr=%d\n", i, found[i].thId,found[i].incr);
-  //  printf("[%d]: %s\n", i,toHex(found[i].hash,20).c_str());
-  //}
+        // Initialize points
+        for (int i = 0; i < totalThreads_; i++) {
+            k.Rand(256);
+            points[i] = secp->ComputePublicKey(&k);
+            k.Add((uint64_t)GRP_SIZE / 2);
+            points2[i] = secp->ComputePublicKey(&k);
+        }
 
-  printf("ComputeKeys() found %d items , CPU check...\n",(int)found.size());
+        // Set test prefixes and keys
+        SetPrefixes({0xFEFE, 0x1234});
+        SetKeys(points2);
+        
+        const double t0 = Timer::get_tick();
+        Launch(foundItems, true);
+        const double t1 = Timer::get_tick();
+        Timer::printResult("Key", 6 * STEP_SIZE * totalThreads_, t0, t1);
 
-  Int beta,beta2;
-  beta.SetBase16((char *)"7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee");
-  beta2.SetBase16((char *)"851695d49a83f8ef919bb86153cbcb16630fb68aed0a766a3ec693d68e6afa40");
+        printf("ComputeKeys() found %zu items, CPU check...\n", foundItems.size());
 
-  // Check with CPU
-  for (j = 0; (j<nbThread); j++) {
-    for (i = 0; i < STEP_SIZE; i++) {
+        // Prepare endomorphism constants
+        Int beta, beta2;
+        beta.SetBase16("7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee");
+        beta2.SetBase16("851695d49a83f8ef919bb86153cbcb16630fb68aed0a766a3ec693d68e6afa40");
 
-      Point pt,p1,p2;
-      pt = p[j];
-      p1 = p[j];
-      p2 = p[j];
-      p1.x.ModMulK1(&beta);
-      p2.x.ModMulK1(&beta2);
-      p[j] = secp->NextKey(p[j]);
+        // Verify results
+        bool ok = true;
+        for (int j = 0; j < totalThreads_; j++) {
+            for (int i = 0; i < STEP_SIZE; i++) {
+                Point pt = points[j];
+                Point p1 = points[j];
+                Point p2 = points[j];
+                p1.x.ModMulK1(&beta);
+                p2.x.ModMulK1(&beta2);
+                points[j] = secp->NextKey(points[j]);
 
-      // Point and endo
-      secp->GetHash160(P2PKH, searchComp, pt, h);
-      prefix_t pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-	      nbFoundCPU[0]++;
-        ok &= CheckHash(h,found, j, i, 0, nbOK + 0);
-      }
-      secp->GetHash160(P2PKH, searchComp, p1, h);
-      pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-        nbFoundCPU[1]++;
-        ok &= CheckHash(h, found, j, i, 1, nbOK + 1);
-      }
-      secp->GetHash160(P2PKH, searchComp, p2, h);
-      pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-        nbFoundCPU[2]++;
-        ok &= CheckHash(h, found, j, i, 2, nbOK + 2);
-      }
+                uint8_t h[20];
+                auto checkPoint = [&](const Point& p, int endo, int incr, int idx) {
+                    secp->GetHash160(SearchType::P2PKH, searchComp, p, h);
+                    const PrefixT pr = *(PrefixT*)h;
+                    if (pr == 0xFEFE || pr == 0x1234) {
+                        nbFoundCPU[idx]++;
+                        ok &= CheckHash(h, foundItems, j, incr, endo, nbOK + idx);
+                    }
+                };
 
-      // Symetrics
-      pt.y.ModNeg();
-      p1.y.ModNeg();
-      p2.y.ModNeg();
+                // Check all variations
+                checkPoint(pt, 0, i, 0);
+                checkPoint(p1, 1, i, 1);
+                checkPoint(p2, 2, i, 2);
 
-      secp->GetHash160(P2PKH, searchComp, pt, h);
-      pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-        nbFoundCPU[3]++;
-        ok &= CheckHash(h, found, j, -i, 0, nbOK + 3);
-      }
-      secp->GetHash160(P2PKH, searchComp, p1, h);
-      pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-        nbFoundCPU[4]++;
-        ok &= CheckHash(h, found, j, -i, 1, nbOK + 4);
-      }
-      secp->GetHash160(P2PKH, searchComp, p2, h);
-      pr = *(prefix_t *)h;
-      if (pr == 0xFEFE || pr == 0x1234) {
-        nbFoundCPU[5]++;
-        ok &= CheckHash(h, found, j, -i, 2, nbOK + 5);
-      }
+                // Check symmetric versions
+                pt.y.ModNeg();
+                p1.y.ModNeg();
+                p2.y.ModNeg();
 
+                checkPoint(pt, 0, -i, 3);
+                checkPoint(p1, 1, -i, 4);
+                checkPoint(p2, 2, -i, 5);
+            }
+        }
+
+        if (ok && !foundItems.empty()) {
+            ok = false;
+            printf("Unexpected item found!\n");
+        }
+
+        if (!ok) {
+            const int totalFound = std::accumulate(nbFoundCPU, nbFoundCPU + 6, 0);
+            printf("CPU found %d items\n", totalFound);
+
+            printf("GPU: point   correct [%d/%d]\n", nbOK[0], nbFoundCPU[0]);
+            printf("GPU: endo #1 correct [%d/%d]\n", nbOK[1], nbFoundCPU[1]);
+            printf("GPU: endo #2 correct [%d/%d]\n", nbOK[2], nbFoundCPU[2]);
+            printf("GPU: sym/point   correct [%d/%d]\n", nbOK[3], nbFoundCPU[3]);
+            printf("GPU: sym/endo #1 correct [%d/%d]\n", nbOK[4], nbFoundCPU[4]);
+            printf("GPU: sym/endo #2 correct [%d/%d]\n", nbOK[5], nbFoundCPU[5]);
+            printf("GPU/CPU check Failed!\n");
+        } else {
+            printf("GPU/CPU check OK\n");
+        }
+
+        return ok;
     }
-  }
 
-  if (ok && found.size()!=0) {
-    ok = false;
-    printf("Unexpected item found !\n");
-  }
+    void Engine::PrintCudaInfo() {
+        const char* computeModes[] = {
+            "Multiple host threads",
+            "Only one host thread",
+            "No host thread",
+            "Multiple process threads",
+            "Unknown",
+            nullptr
+        };
 
-  if( !ok ) {
+        int deviceCount = 0;
+        cudaError_t err = cudaGetDeviceCount(&deviceCount);
+        if (err != cudaSuccess) {
+            printf("GPUEngine: CudaGetDeviceCount %s\n", cudaGetErrorString(err));
+            return;
+        }
 
-    int nbF = nbFoundCPU[0] + nbFoundCPU[1] + nbFoundCPU[2] +
-              nbFoundCPU[3] + nbFoundCPU[4] + nbFoundCPU[5];
-    printf("CPU found %d items\n",nbF);
+        if (deviceCount == 0) {
+            printf("GPUEngine: No available CUDA devices\n");
+            return;
+        }
 
-    printf("GPU: point   correct [%d/%d]\n", nbOK[0] , nbFoundCPU[0]);
-    printf("GPU: endo #1 correct [%d/%d]\n", nbOK[1] , nbFoundCPU[1]);
-    printf("GPU: endo #2 correct [%d/%d]\n", nbOK[2] , nbFoundCPU[2]);
+        for (int i = 0; i < deviceCount; i++) {
+            err = cudaSetDevice(i);
+            if (err != cudaSuccess) {
+                printf("GPUEngine: cudaSetDevice(%d) %s\n", i, cudaGetErrorString(err));
+                continue;
+            }
 
-    printf("GPU: sym/point   correct [%d/%d]\n", nbOK[3] , nbFoundCPU[3]);
-    printf("GPU: sym/endo #1 correct [%d/%d]\n", nbOK[4] , nbFoundCPU[4]);
-    printf("GPU: sym/endo #2 correct [%d/%d]\n", nbOK[5] , nbFoundCPU[5]);
+            cudaDeviceProp props;
+            cudaGetDeviceProperties(&props, i);
+            printf("GPU #%d %s (%dx%d cores) (Cap %d.%d) (%.1f MB) (%s)\n",
+                   i, props.name, props.multiProcessorCount,
+                   ConvertSMVerToCores(props.major, props.minor),
+                   props.major, props.minor,
+                   props.totalGlobalMem / 1048576.0,
+                   computeModes[props.computeMode]);
+        }
+    }
 
-    printf("GPU/CPU check Failed !\n");
+    int Engine::GetThreadCount() const {
+        return totalThreads_;
+    }
 
-  }
+    int Engine::GetGroupSize() {
+        return GRP_SIZE;
+    }
 
-  if(ok) printf("GPU/CPU check OK\n");
+    void Engine::SetSearchMode(SearchMode mode) {
+        searchMode_ = mode;
+    }
 
-  delete[] p;
-  return ok;
+    void Engine::SetSearchType(SearchType type) {
+        searchType_ = type;
+    }
 
-}
+    std::string Engine::GetDeviceName() const {
+        return deviceName_;
+    }
 
-
+    void Engine::GenerateCode(Secp256K1* secp, int size) {
+        // Implementation depends on specific requirements
+        throw std::runtime_error("GenerateCode not implemented in this version");
+    }
+} // namespace GPUEngine
