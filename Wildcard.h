@@ -1,35 +1,23 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+#ifndef WILDCARD_H
+#define WILDCARD_H
 
-#ifndef WILDCARDH
-#define WILDCARDH
-
-#include <string>
+#include <string_view>
 
 class Wildcard {
-
 public:
-  /**
-  * Checks whether a string matches a given wildcard pattern.
-  * Possible patterns allow to match single characters ('?') or any count of
-  * characters ('*')
-  */
-  static bool match(const char *str, const char *pattern,bool caseSensitive);
-
+    /**
+     * Checks whether a string matches a given wildcard pattern.
+     * @param str The input string to match
+     * @param pattern The wildcard pattern (supports '?' and '*')
+     * @param caseSensitive Whether the comparison should be case sensitive
+     * @return true if the string matches the pattern, false otherwise
+     */
+    static bool match(std::string_view str, std::string_view pattern, bool caseSensitive) noexcept;
+    
+    // Overload for C-style strings
+    static bool match(const char* str, const char* pattern, bool caseSensitive) noexcept {
+        return match(std::string_view(str), std::string_view(pattern), caseSensitive);
+    }
 };
 
-#endif // WILDCARDH
+#endif // WILDCARD_H
