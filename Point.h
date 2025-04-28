@@ -1,46 +1,37 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#ifndef POINTH
-#define POINTH
+#ifndef POINT_H
+#define POINT_H
 
 #include "Int.h"
+#include <string>
 
 class Point {
-
 public:
-
-  Point();
-  Point(Int *cx,Int *cy,Int *cz);
-  Point(Int *cx, Int *cz);
-  Point(const Point &p);
-  ~Point();
-  bool isZero();
-  bool equals(Point &p);
-  void Set(Point &p);
-  void Set(Int *cx, Int *cy,Int *cz);
-  void Clear();
-  void Reduce();
-  std::string toString();
-
-  Int x;
-  Int y;
-  Int z;
-
+    // Coordinates
+    Int x;
+    Int y;
+    Int z;
+    
+    // Constructors
+    Point() = default;
+    Point(const Int& x, const Int& y, const Int& z);
+    
+    // Core functionality
+    void Clear();
+    bool isZero() const;
+    void Reduce();
+    bool equals(const Point& p) const;
+    
+    // String conversion
+    std::string toString() const;
+    
+    // Point operations
+    Point Neg() const;
+    
+    // Serialization
+    void Set(const Point& p);
+    
+    // Validation
+    bool IsValid() const;
 };
 
-#endif // POINTH
+#endif // POINT_H
