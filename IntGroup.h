@@ -1,22 +1,5 @@
-/*
- * This file is part of the VanitySearch distribution (https://github.com/JeanLucPons/VanitySearch).
- * Copyright (c) 2019 Jean Luc PONS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#ifndef INTGROUPH
-#define INTGROUPH
+#ifndef __INTGROUP_H__
+#define __INTGROUP_H__
 
 #include "Int.h"
 #include <vector>
@@ -25,17 +8,48 @@ class IntGroup {
 
 public:
 
-	IntGroup(int size);
-	~IntGroup();
-	void Set(Int *pts);
-	void ModInv();
+    // Constructors
+    IntGroup();
+    IntGroup(int size);
+    IntGroup(const IntGroup &other);
+
+    // Destructor
+    ~IntGroup();
+
+    // Management
+    void Create(int size);
+    void Set(const IntGroup &other);
+    void Clear();
+
+    // Operations
+    void ModularReduce(Int *mod);
+    void ModularAdd(Int *mod);
+    void Normalize();
+    void ShiftL(uint32_t bits);
+    void ShiftR(uint32_t bits);
+
+    // Data access
+    int GetSize() const;
+    Int *GetInt(int index);
+    const Int *GetInt(int index) const;
+
+    // Static operations
+    static void ModInv(IntGroup *in, Int *mod);
+    static void ModAdd(IntGroup *in, Int *mod);
+    static void ModMul(IntGroup *in, Int *mod);
+    static void ModK1(IntGroup *in);
+    static void ModK2(IntGroup *in);
+    static void ModK3(IntGroup *in);
 
 private:
 
-	Int *ints;
-  Int *subp;
-  int size;
+    std::vector<Int> ints;
+    int groupSize;
+
+    void Init(int size);
+    void Free();
+    void CheckIndex(int index) const;
 
 };
 
-#endif // INTGROUPCPUH
+#endif // __INTGROUP_H__
