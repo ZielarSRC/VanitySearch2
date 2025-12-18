@@ -1,6 +1,9 @@
 root@ip-172-31-43-220:~/VanitySearch2# make gpu=1 CCAP=D0 all
+mkdir -p obj
 cd obj &&       mkdir -p GPU
 cd obj &&       mkdir -p hash
+g++ -DWITHGPU -m64 -mssse3 -Wno-write-strings -O2 -I. -I/usr/local/cuda-12.5/include -o obj/Base58.o -c Base58.cpp
+g++ -DWITHGPU -m64 -mssse3 -Wno-write-strings -O2 -I. -I/usr/local/cuda-12.5/include -o obj/IntGroup.o -c IntGroup.cpp
 g++ -DWITHGPU -m64 -mssse3 -Wno-write-strings -O2 -I. -I/usr/local/cuda-12.5/include -o obj/main.o -c main.cpp
 main.cpp: In function ‘void computeAddress(Secp256K1*, std::string)’:
 main.cpp:186:61: error: cannot convert ‘Point’ to ‘Int&’
