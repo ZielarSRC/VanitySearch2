@@ -139,8 +139,6 @@ int _ConvertSMVer2Cores(int major, int minor) {
   } sSMtoCores;
 
   sSMtoCores nGpuArchCoresPerSM[] = {
-      {0x20, 32}, // Fermi Generation (SM 2.0) GF100 class
-      {0x21, 48}, // Fermi Generation (SM 2.1) GF10x class
       {0x30, 192},
       {0x32, 192},
       {0x35, 192},
@@ -156,7 +154,16 @@ int _ConvertSMVer2Cores(int major, int minor) {
       {0x75,  64},
       {0x80,  64},
       {0x86, 128},
-      {-1, -1} };
+      {0x87, 128},
+      {0x89, 128},
+      {0x90, 128},
+      {0xa0, 128},
+      {0xa1, 128},
+      {0xa3, 128},
+      {0xb0, 128},
+      {0xc0, 128},
+      {0xc1, 128},
+      {-1, -1}};
 
   int index = 0;
 
