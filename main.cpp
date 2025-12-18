@@ -183,13 +183,14 @@ void generateKeyPair(Secp256K1 *secp, string seed, int searchMode, bool paranoia
 void computeAddress(Secp256K1 *secp, string pubKey) {
   bool compressed;
   Point p = secp->ParsePublicKeyHex(pubKey, compressed);
-  printf("Address : %s\n", secp->GetPrivAddress(compressed, p).c_str());
+  printf("Address : %s\n", secp->GetAddress(P2PKH, compressed, p).c_str());
 }
 
 // ------------------------------------------------------------------------------------------
 
 void computePubKey(Secp256K1 *secp, string privKey) {
-  Int key(privKey.c_str());
+  Int key;
+  key.SetBase16(privKey.c_str());
   printf("Compressed   : %s\n", secp->GetPublicKeyHex(true, secp->ComputePublicKey(&key)).c_str());
   printf("Uncompressed : %s\n", secp->GetPublicKeyHex(false, secp->ComputePublicKey(&key)).c_str());
 }
@@ -287,7 +288,7 @@ int main(int argc, char *argv[]) {
       string pub = string(argv[a]);
       bool isComp;
       Point p = secp->ParsePublicKeyHex(pub, isComp);
-      printf("Address : %s\n", secp->GetPrivAddress(isComp, p).c_str());
+  printf("Address : %s\n", secp->GetAddress(P2PKH, compressed, p).c_str());
       a++;
     } else if (strcmp(argv[a], "-cp") == 0) {
       a++;
