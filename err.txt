@@ -1,0 +1,335 @@
+root@ip-172-31-43-220:~/VanitySearch2# make gpu=1 CCAP=D0 all
+cd obj &&       mkdir -p GPU
+cd obj &&       mkdir -p hash
+g++ -DWITHGPU -m64 -mssse3 -Wno-write-strings -O2 -I. -I/usr/local/cuda-12.5/include -o obj/main.o -c main.cpp
+main.cpp: In function ‘void computeAddress(Secp256K1*, std::string)’:
+main.cpp:186:61: error: cannot convert ‘Point’ to ‘Int&’
+  186 |   printf("Address : %s\n", secp->GetPrivAddress(compressed, p).c_str());
+      |                                                             ^
+      |                                                             |
+      |                                                             Point
+In file included from main.cpp:25:
+SECP256k1.h:51:52: note:   initializing argument 2 of ‘std::string Secp256K1::GetPrivAddress(bool, Int&)’
+   51 |   std::string GetPrivAddress(bool compressed, Int &privKey );
+      |                                               ~~~~~^~~~~~~
+main.cpp: In function ‘void computePubKey(Secp256K1*, std::string)’:
+main.cpp:192:26: error: no matching function for call to ‘Int(const char*)’
+  192 |   Int key(privKey.c_str());
+      |                          ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:40:7: note: candidate: ‘constexpr Int::Int(const Int&)’ <near match>
+   40 | class Int {
+      |       ^~~
+Int.h:40:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:26: error: conversion from ‘const char*’ to ‘const Int’ is ambiguous
+  192 |   Int key(privKey.c_str());
+      |                          ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:40:7: note: candidate: ‘constexpr Int::Int(Int&&)’ <near match>
+   40 | class Int {
+      |       ^~~
+Int.h:40:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:26: error: conversion from ‘const char*’ to ‘Int’ is ambiguous
+  192 |   Int key(privKey.c_str());
+      |                          ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:192:24: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  192 |   Int key(privKey.c_str());
+      |           ~~~~~~~~~~~~~^~
+      |                        |
+      |                        const char*
+main.cpp:193:83: error: cannot bind non-const lvalue reference of type ‘Point&’ to an rvalue of type ‘Point’
+  193 |   printf("Compressed   : %s\n", secp->GetPublicKeyHex(true, secp->ComputePublicKey(&key)).c_str());
+      |                                                             ~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from main.cpp:25:
+SECP256k1.h:52:55: note:   initializing argument 2 of ‘std::string Secp256K1::GetPublicKeyHex(bool, Point&)’
+   52 |   std::string GetPublicKeyHex(bool compressed, Point &p);
+      |                                                ~~~~~~~^
+main.cpp:194:84: error: cannot bind non-const lvalue reference of type ‘Point&’ to an rvalue of type ‘Point’
+  194 |   printf("Uncompressed : %s\n", secp->GetPublicKeyHex(false, secp->ComputePublicKey(&key)).c_str());
+      |                                                              ~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from main.cpp:25:
+SECP256k1.h:52:55: note:   initializing argument 2 of ‘std::string Secp256K1::GetPublicKeyHex(bool, Point&)’
+   52 |   std::string GetPublicKeyHex(bool compressed, Point &p);
+      |                                                ~~~~~~~^
+main.cpp: In function ‘int main(int, char**)’:
+main.cpp:290:61: error: cannot convert ‘Point’ to ‘Int&’
+  290 |       printf("Address : %s\n", secp->GetPrivAddress(isComp, p).c_str());
+      |                                                             ^
+      |                                                             |
+      |                                                             Point
+In file included from main.cpp:25:
+SECP256k1.h:51:52: note:   initializing argument 2 of ‘std::string Secp256K1::GetPrivAddress(bool, Int&)’
+   51 |   std::string GetPrivAddress(bool compressed, Int &privKey );
+      |                                               ~~~~~^~~~~~~
+main.cpp:303:44: error: no matching function for call to ‘Int(const char*)’
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                                            ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:40:7: note: candidate: ‘constexpr Int::Int(const Int&)’ <near match>
+   40 | class Int {
+      |       ^~~
+Int.h:40:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:44: error: conversion from ‘const char*’ to ‘const Int’ is ambiguous
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                                            ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:40:7: note: candidate: ‘constexpr Int::Int(Int&&)’ <near match>
+   40 | class Int {
+      |       ^~~
+Int.h:40:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:44: error: conversion from ‘const char*’ to ‘Int’ is ambiguous
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                                            ^
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:46:3: note: candidate: ‘Int::Int(uint64_t)’ <near match>
+   46 |   Int(uint64_t u64);
+      |   ^~~
+Int.h:46:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘uint64_t’ {aka ‘long unsigned int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+In file included from Point.h:21,
+                 from SECP256k1.h:21,
+                 from main.cpp:25:
+Int.h:45:3: note: candidate: ‘Int::Int(int64_t)’ <near match>
+   45 |   Int(int64_t i64);
+      |   ^~~
+Int.h:45:3: note:   conversion of argument 1 would be ill-formed:
+main.cpp:303:42: error: invalid conversion from ‘const char*’ to ‘int64_t’ {aka ‘long int’} [-fpermissive]
+  303 |       Int privKey(string(argv[a++]).c_str());
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~
+      |                                          |
+      |                                          const char*
+main.cpp:316:35: error: ‘class Secp256K1’ has no member named ‘lambda1’
+  316 |       lambda.ModSubK1order(&secp->lambda1);
+      |                                   ^~~~~~~
+main.cpp:320:36: error: ‘class Secp256K1’ has no member named ‘lambda2’
+  320 |       lambda2.ModSubK1order(&secp->lambda2);
+      |                                    ^~~~~~~
+main.cpp:336:11: error: ‘found’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |           ^~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:336:22: error: ‘privAddrFound’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |                      ^~~~~~~~~~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:336:39: error: ‘privAddr’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |                                       ^~~~~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:339:7: error: ‘privAddrFound’ was not declared in this scope
+  339 |       privAddrFound = true;                                                                                 \
+      |       ^~~~~~~~~~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:340:7: error: ‘privAddr’ was not declared in this scope
+  340 |       privAddr = addr;                                                                                      \
+      |       ^~~~~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:342:87: error: cannot convert ‘Point’ to ‘Int&’
+  342 |       printf("         Addr : %s\n", secp->GetPrivAddress(true, secp->ComputePublicKey(&privKey)).c_str()); \
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+      |                                                                                       |
+      |                                                                                       Point
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+In file included from main.cpp:25:
+SECP256k1.h:51:52: note:   initializing argument 2 of ‘std::string Secp256K1::GetPrivAddress(bool, Int&)’
+   51 |   std::string GetPrivAddress(bool compressed, Int &privKey );
+      |                                               ~~~~~^~~~~~~
+main.cpp:343:7: error: ‘found’ was not declared in this scope
+  343 |       found = true;                                                                                         \
+      |       ^~~~~
+main.cpp:351:9: note: in expansion of macro ‘CHECK_ADDR’
+  351 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:336:11: error: ‘found’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |           ^~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:336:22: error: ‘privAddrFound’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |                      ^~~~~~~~~~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:336:39: error: ‘privAddr’ was not declared in this scope
+  336 |       if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+      |                                       ^~~~~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:339:7: error: ‘privAddrFound’ was not declared in this scope
+  339 |       privAddrFound = true;                                                                                 \
+      |       ^~~~~~~~~~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:340:7: error: ‘privAddr’ was not declared in this scope
+  340 |       privAddr = addr;                                                                                      \
+      |       ^~~~~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:342:87: error: cannot convert ‘Point’ to ‘Int&’
+  342 |       printf("         Addr : %s\n", secp->GetPrivAddress(true, secp->ComputePublicKey(&privKey)).c_str()); \
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+      |                                                                                       |
+      |                                                                                       Point
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+In file included from main.cpp:25:
+SECP256k1.h:51:52: note:   initializing argument 2 of ‘std::string Secp256K1::GetPrivAddress(bool, Int&)’
+   51 |   std::string GetPrivAddress(bool compressed, Int &privKey );
+      |                                               ~~~~~^~~~~~~
+main.cpp:343:7: error: ‘found’ was not declared in this scope
+  343 |       found = true;                                                                                         \
+      |       ^~~~~
+main.cpp:357:9: note: in expansion of macro ‘CHECK_ADDR’
+  357 |         CHECK_ADDR();
+      |         ^~~~~~~~~~
+main.cpp:359:14: error: ‘found’ was not declared in this scope
+  359 |         if (!found) {
+      |              ^~~~~
+make: *** [Makefile:70: obj/main.o] Error 1
