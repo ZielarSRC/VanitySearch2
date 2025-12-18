@@ -13,17 +13,20 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
+#include <string.h>
+
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+#include "SECP256k1.h"
 #include "Timer.h"
 #include "Vanity.h"
-#include "SECP256k1.h"
-#include <fstream>
-#include <string>
-#include <string.h>
-#include <stdexcept>
-#include "hash/sha512.h"
 #include "hash/sha256.h"
+#include "hash/sha512.h"
 
 #define RELEASE "1.19"
 
@@ -32,7 +35,6 @@ using namespace std;
 // ------------------------------------------------------------------------------------------
 
 void printUsage() {
-
   printf("VanitySeacrh [-check] [-v] [-u] [-b] [-c] [-gpu] [-stop] [-i inputfile]\n");
   printf("             [-gpuId gpuId1[,gpuId2,...]] [-g g1x,g1y,[,g2x,g2y,...]]\n");
   printf("             [-o outputfile] [-m maxFound] [-ps seed] [-s seed] [-t nbThread]\n");
@@ -63,40 +65,32 @@ void printUsage() {
   printf(" -sp startPubKey: Start the search with a pubKey (for private key splitting)\n");
   printf(" -r rekey: Rekey interval in MegaKey, default is disabled\n");
   exit(0);
-
 }
 
 // ------------------------------------------------------------------------------------------
 
-int getInt(string name,char *v) {
-
+int getInt(string name, char *v) {
   int r;
 
   try {
-
     r = std::stoi(string(v));
 
-  } catch(std::invalid_argument&) {
-
-    printf("Invalid %s argument, number expected\n",name.c_str());
+  } catch (std::invalid_argument &) {
+    printf("Invalid %s argument, number expected\n", name.c_str());
     exit(-1);
-
   }
 
   return r;
-
 }
 
 // ------------------------------------------------------------------------------------------
 
-void getInts(string name,vector<int> &tokens, const string &text, char sep) {
-
+void getInts(string name, vector<int> &tokens, const string &text, char sep) {
   size_t start = 0, end = 0;
   tokens.clear();
   int item;
 
   try {
-
     while ((end = text.find(sep, start)) != string::npos) {
       item = std::stoi(text.substr(start, end - start));
       tokens.push_back(item);
@@ -106,19 +100,15 @@ void getInts(string name,vector<int> &tokens, const string &text, char sep) {
     item = std::stoi(text.substr(start));
     tokens.push_back(item);
 
-  } catch(std::invalid_argument &) {
-
-    printf("Invalid %s argument, number expected\n",name.c_str());
+  } catch (std::invalid_argument &) {
+    printf("Invalid %s argument, number expected\n", name.c_str());
     exit(-1);
-
   }
-
 }
 
 // ------------------------------------------------------------------------------------------
 
 void parseFile(string fileName, vector<string> &lines) {
-
   // Get file size
   FILE *fp = fopen(fileName.c_str(), "rb");
   if (fp == NULL) {
@@ -137,7 +127,6 @@ void parseFile(string fileName, vector<string> &lines) {
   ifstream inFile(fileName);
   lines.reserve(nbAddr);
   while (getline(inFile, line)) {
-
     // Remove ending \r\n
     int l = (int)line.length() - 1;
     while (l >= 0 && isspace(line.at(l))) {
@@ -150,29 +139,24 @@ void parseFile(string fileName, vector<string> &lines) {
       nbLine++;
       if (loaddingProgress) {
         if ((nbLine % 50000) == 0)
-          printf("[Loading input file %5.1f%%]\r", ((double)nbLine*100.0) / ((double)(nbAddr)*33.0 / 34.0));
+          printf("[Loading input file %5.1f%%]\r", ((double)nbLine * 100.0) / ((double)(nbAddr) * 33.0 / 34.0));
       }
     }
-
   }
 
-  if (loaddingProgress)
-    printf("[Loading input file 100.0%%]\n");
-
+  if (loaddingProgress) printf("[Loading input file 100.0%%]\n");
 }
 
 // ------------------------------------------------------------------------------------------
 
-void generateKeyPair(Secp256K1 *secp, string seed, int searchMode,bool paranoiacSeed) {
-
+void generateKeyPair(Secp256K1 *secp, string seed, int searchMode, bool paranoiacSeed) {
   if (seed.length() < 8) {
     printf("Error: Use a seed of at least 8 characters to generate a key pair\n");
     printf("Ex: VanitySearch -s \"A Strong Password\" -kp\n");
     exit(-1);
   }
 
-  if(paranoiacSeed)
-    seed = seed + Timer::getSeed(32);
+  if (paranoiacSeed) seed = seed + Timer::getSeed(32);
 
   if (searchMode == SEARCH_BOTH) {
     printf("Error: Use compressed or uncompressed to generate a key pair\n");
@@ -183,190 +167,36 @@ void generateKeyPair(Secp256K1 *secp, string seed, int searchMode,bool paranoiac
 
   string salt = "VanitySearch";
   unsigned char hseed[64];
-  pbkdf2_hmac_sha512(hseed, 64, (const uint8_t *)seed.c_str(), seed.length(),
-    (const uint8_t *)salt.c_str(), salt.length(),
-    2048);
+  pbkdf2_hmac_sha512(hseed, 64, (const uint8_t *)seed.c_str(), seed.length(), (const uint8_t *)salt.c_str(),
+                     salt.length(), 2048);
 
   Int privKey;
   privKey.SetInt32(0);
   sha256(hseed, 64, (unsigned char *)privKey.bits64);
   Point p = secp->ComputePublicKey(&privKey);
-  printf("Priv : %s\n", secp->GetPrivAddress(compressed,privKey).c_str());
-  printf("Pub  : %s\n", secp->GetPublicKeyHex(compressed,p).c_str());
-
+  printf("Priv : %s\n", secp->GetPrivAddress(compressed, privKey).c_str());
+  printf("Pub  : %s\n", secp->GetPublicKeyHex(compressed, p).c_str());
 }
 
 // ------------------------------------------------------------------------------------------
 
-void outputAdd(string outputFile, int addrType, string addr, string pAddr, string pAddrHex) {
-
-  FILE *f = stdout;
-  bool needToClose = false;
-
-  if (outputFile.length() > 0) {
-    f = fopen(outputFile.c_str(), "a");
-    if (f == NULL) {
-      printf("Cannot open %s for writing\n", outputFile.c_str());
-      f = stdout;
-    } else {
-      needToClose = true;
-    }
-  }
-
-  fprintf(f, "\nPub Addr: %s\n", addr.c_str());
-
-
-  switch (addrType) {
-  case P2PKH:
-    fprintf(f, "Priv (WIF): p2pkh:%s\n", pAddr.c_str());
-    break;
-  case P2SH:
-    fprintf(f, "Priv (WIF): p2wpkh-p2sh:%s\n", pAddr.c_str());
-    break;
-  case BECH32:
-    fprintf(f, "Priv (WIF): p2wpkh:%s\n", pAddr.c_str());
-    break;
-  }
-  fprintf(f, "Priv (HEX): 0x%s\n", pAddrHex.c_str());
-
-  if (needToClose)
-    fclose(f);
-
-}
-
-// ------------------------------------------------------------------------------------------
-#define CHECK_ADDR()                                           \
-  fullPriv.ModAddK1order(&e, &partialPrivKey);                 \
-  p = secp->ComputePublicKey(&fullPriv);                       \
-  cAddr = secp->GetAddress(addrType, compressed, p);           \
-  if (cAddr == addr) {                                         \
-    found = true;                                              \
-    string pAddr = secp->GetPrivAddress(compressed, fullPriv); \
-    string pAddrHex = fullPriv.GetBase16();                    \
-    outputAdd(outputFile, addrType, addr, pAddr, pAddrHex);    \
-  }
-
-void reconstructAdd(Secp256K1 *secp, string fileName, string outputFile, string privAddr) {
-
+void computeAddress(Secp256K1 *secp, string pubKey) {
   bool compressed;
-  int addrType;
-  Int lambda;
-  Int lambda2;
-  lambda.SetBase16("5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72");
-  lambda2.SetBase16("ac9c52b33fa3cf1f5ad9e3fd77ed9ba4a880b9fc8ec739c2e0cfc810b51283ce");
-
-  Int privKey = secp->DecodePrivateKey((char *)privAddr.c_str(),&compressed);
-  if(privKey.IsNegative())
-    exit(-1);
-
-  vector<string> lines;
-  parseFile(fileName,lines);
-
-  for (int i = 0; i < (int)lines.size(); i+=2) {
-
-    string addr;
-    string partialPrivAddr;
-
-    if (lines[i].substr(0, 12) == "PubAddress: ") {
-
-      addr = lines[i].substr(12);
-
-      switch (addr.data()[0]) {
-      case '1':
-        addrType = P2PKH; break;
-      case '3':
-        addrType = P2SH; break;
-      case 'b':
-      case 'B':
-        addrType = BECH32; break;
-      default:
-        printf("Invalid partialkey info file at line %d\n", i);
-        printf("%s Address format not supported\n", addr.c_str());
-        continue;
-      }
-
-    } else {
-      printf("Invalid partialkey info file at line %d (\"PubAddress: \" expected)\n",i);
-      exit(-1);
-    }
-
-    if (lines[i+1].substr(0, 13) == "PartialPriv: ") {
-      partialPrivAddr = lines[i+1].substr(13);
-    } else {
-      printf("Invalid partialkey info file at line %d (\"PartialPriv: \" expected)\n", i);
-      exit(-1);
-    }
-
-    bool partialMode;
-    Int partialPrivKey = secp->DecodePrivateKey((char *)partialPrivAddr.c_str(), &partialMode);
-    if (privKey.IsNegative()) {
-      printf("Invalid partialkey info file at line %d\n", i);
-      exit(-1);
-    }
-
-    if (partialMode != compressed) {
-
-      printf("Warning, Invalid partialkey at line %d (Wrong compression mode, ignoring key)\n", i);
-      continue;
-
-    } else {
-
-      // Reconstruct the address
-      Int fullPriv;
-      Point p;
-      Int e;
-      string cAddr;
-      bool found = false;
-
-      // No sym, no endo
-      e.Set(&privKey);
-      CHECK_ADDR();
-
-      // No sym, endo 1
-      e.Set(&privKey);
-      e.ModMulK1order(&lambda);
-      CHECK_ADDR();
-
-      // No sym, endo 2
-      e.Set(&privKey);
-      e.ModMulK1order(&lambda2);
-      CHECK_ADDR();
-
-      // sym, no endo
-      e.Set(&privKey);
-      e.Neg();
-      e.Add(&secp->order);
-      CHECK_ADDR();
-
-      // sym, endo 1
-      e.Set(&privKey);
-      e.ModMulK1order(&lambda);
-      e.Neg();
-      e.Add(&secp->order);
-      CHECK_ADDR();
-
-      // sym, endo 2
-      e.Set(&privKey);
-      e.ModMulK1order(&lambda2);
-      e.Neg();
-      e.Add(&secp->order);
-      CHECK_ADDR();
-
-      if (!found) {
-        printf("Unable to reconstruct final key from partialkey line %d\n Addr: %s\n PartKey: %s\n",
-          i, addr.c_str(),partialPrivAddr.c_str());
-      }
-
-    }
-
-  }
-
+  Point p = secp->ParsePublicKeyHex(pubKey, compressed);
+  printf("Address : %s\n", secp->GetPrivAddress(compressed, p).c_str());
 }
 
 // ------------------------------------------------------------------------------------------
 
-int main(int argc, char* argv[]) {
+void computePubKey(Secp256K1 *secp, string privKey) {
+  Int key(privKey.c_str());
+  printf("Compressed   : %s\n", secp->GetPublicKeyHex(true, secp->ComputePublicKey(&key)).c_str());
+  printf("Uncompressed : %s\n", secp->GetPublicKeyHex(false, secp->ComputePublicKey(&key)).c_str());
+}
 
+// ------------------------------------------------------------------------------------------
+
+int main(int argc, char *argv[]) {
   // Global Init
   Timer::Init();
   rseed(Timer::getSeed32());
@@ -386,6 +216,7 @@ int main(int argc, char* argv[]) {
   bool stop = false;
   int searchMode = SEARCH_COMPRESSED;
   vector<int> gpuId = {0};
+  bool gpuIdSpecified = false;
   vector<int> gridSize;
   string seed = "";
   vector<string> prefix;
@@ -402,13 +233,13 @@ int main(int argc, char* argv[]) {
   bool paranoiacSeed = false;
 
   while (a < argc) {
-
-    if (strcmp(argv[a], "-gpu")==0) {
+    if (strcmp(argv[a], "-gpu") == 0) {
       gpuEnable = true;
       a++;
-    } else if (strcmp(argv[a], "-gpuId")==0) {
+    } else if (strcmp(argv[a], "-gpuId") == 0) {
       a++;
-      getInts("gpuId",gpuId,string(argv[a]),',');
+      getInts("gpuId", gpuId, string(argv[a]), ',');
+      gpuIdSpecified = true;
       a++;
     } else if (strcmp(argv[a], "-stop") == 0) {
       stop = true;
@@ -417,10 +248,9 @@ int main(int argc, char* argv[]) {
       caseSensitive = false;
       a++;
     } else if (strcmp(argv[a], "-v") == 0) {
-      printf("%s\n",RELEASE);
+      printf("%s\n", RELEASE);
       exit(0);
     } else if (strcmp(argv[a], "-check") == 0) {
-
       Int::Check();
       secp->Check();
 
@@ -429,146 +259,152 @@ int main(int argc, char* argv[]) {
         gridSize.push_back(-1);
         gridSize.push_back(128);
       }
-      GPUEngine g(gridSize[0],gridSize[1],gpuId[0],maxFound,false);
+      GPUEngine g(gridSize[0], gridSize[1], gpuId[0], maxFound, false);
       g.SetSearchMode(searchMode);
       g.Check(secp);
 #else
-  printf("GPU code not compiled, use -DWITHGPU when compiling.\n");
+      printf("GPU code not compiled, use -DWITHGPU when compiling.\n");
 #endif
       exit(0);
     } else if (strcmp(argv[a], "-l") == 0) {
-
 #ifdef WITHGPU
       GPUEngine::PrintCudaInfo();
 #else
-  printf("GPU code not compiled, use -DWITHGPU when compiling.\n");
+      printf("GPU code not compiled, use -DWITHGPU when compiling.\n");
 #endif
       exit(0);
 
     } else if (strcmp(argv[a], "-kp") == 0) {
-      generateKeyPair(secp,seed,searchMode,paranoiacSeed);
+      generateKeyPair(secp, seed, searchMode, paranoiacSeed);
       exit(0);
     } else if (strcmp(argv[a], "-sp") == 0) {
       a++;
       string pub = string(argv[a]);
       startPuKey = secp->ParsePublicKeyHex(pub, startPubKeyCompressed);
       a++;
-    } else if(strcmp(argv[a],"-ca") == 0) {
+    } else if (strcmp(argv[a], "-ca") == 0) {
       a++;
       string pub = string(argv[a]);
       bool isComp;
-      Point p = secp->ParsePublicKeyHex(pub,isComp);
-      printf("Addr (P2PKH): %s\n",secp->GetAddress(P2PKH,isComp,p).c_str());
-      printf("Addr (P2SH): %s\n",secp->GetAddress(P2SH,isComp,p).c_str());
-      printf("Addr (BECH32): %s\n",secp->GetAddress(BECH32,isComp,p).c_str());
-      exit(0);
+      Point p = secp->ParsePublicKeyHex(pub, isComp);
+      printf("Address : %s\n", secp->GetPrivAddress(isComp, p).c_str());
+      a++;
     } else if (strcmp(argv[a], "-cp") == 0) {
       a++;
       string priv = string(argv[a]);
-      Int k;
-      bool isComp = true;
-      if(priv[0]=='5' || priv[0] == 'K' || priv[0] == 'L') {
-        k = secp->DecodePrivateKey((char *)priv.c_str(),&isComp);
-      } else {
-        k.SetBase16(argv[a]);
-      }
-      Point p = secp->ComputePublicKey(&k);
-      printf("PrivAddr: p2pkh:%s\n",secp->GetPrivAddress(isComp,k).c_str());
-      printf("PubKey: %s\n",secp->GetPublicKeyHex(isComp,p).c_str());
-      printf("Addr (P2PKH): %s\n", secp->GetAddress(P2PKH,isComp,p).c_str());
-      printf("Addr (P2SH): %s\n", secp->GetAddress(P2SH,isComp,p).c_str());
-      printf("Addr (BECH32): %s\n", secp->GetAddress(BECH32,isComp,p).c_str());
-      exit(0);
+      computePubKey(secp, priv);
+      a++;
     } else if (strcmp(argv[a], "-rp") == 0) {
+      string partialKeysFile;
       a++;
-      string priv = string(argv[a]);
-      a++;
-      string file = string(argv[a]);
-      a++;
-      reconstructAdd(secp,file,outputFile,priv);
-      exit(0);
-    } else if (strcmp(argv[a], "-u") == 0) {
-      searchMode = SEARCH_UNCOMPRESSED;
-      a++;
-    } else if (strcmp(argv[a], "-b") == 0) {
-      searchMode = SEARCH_BOTH;
-      a++;
-    } else if (strcmp(argv[a], "-nosse") == 0) {
-      sse = false;
-      a++;
-    } else if (strcmp(argv[a], "-g") == 0) {
-      a++;
-      getInts("gridSize",gridSize,string(argv[a]),',');
-      a++;
-    } else if (strcmp(argv[a], "-s") == 0) {
-      a++;
-      seed = string(argv[a]);
-      a++;
-    } else if (strcmp(argv[a], "-ps") == 0) {
-      a++;
-      seed = string(argv[a]);
-      paranoiacSeed = true;
-      a++;
-    } else if (strcmp(argv[a], "-o") == 0) {
-      a++;
-      outputFile = string(argv[a]);
-      a++;
-    } else if (strcmp(argv[a], "-i") == 0) {
-      a++;
-      parseFile(string(argv[a]),prefix);
-      a++;
-    } else if (strcmp(argv[a], "-t") == 0) {
-      a++;
-      nbCPUThread = getInt("nbCPUThread",argv[a]);
-      a++;
-      tSpecified = true;
-    } else if (strcmp(argv[a], "-m") == 0) {
-      a++;
-      maxFound = getInt("maxFound", argv[a]);
-      a++;
-    } else if (strcmp(argv[a], "-r") == 0) {
-      a++;
-      rekey = (uint64_t)getInt("rekey", argv[a]);
-      a++;
-    } else if (strcmp(argv[a], "-h") == 0) {
-      printUsage();
-    } else if (a == argc - 1) {
-      prefix.push_back(string(argv[a]));
-      a++;
-    } else {
-      printf("Unexpected %s argument\n",argv[a]);
-      exit(-1);
-    }
+      if (a >= argc) {
+        printUsage();
+      }
+      Int privKey(string(argv[a++]).c_str());
+      partialKeysFile = string(argv[a++]);
 
+      string partialPrivAddr = secp->GetPrivAddress(false, privKey);
+
+      FILE *fp = fopen(partialKeysFile.c_str(), "r");
+      if (fp == NULL) {
+        printf("Error: Cannot open %s %s\n", partialKeysFile.c_str(), strerror(errno));
+        exit(-1);
+      }
+
+      Int lambda;
+      lambda.SetInt32(1);
+      lambda.ModSubK1order(&secp->lambda1);
+
+      Int lambda2;
+      lambda2.SetInt32(1);
+      lambda2.ModSubK1order(&secp->lambda2);
+
+      char line[100];
+      int i = 0;
+      while (fgets(line, 100, fp)) {
+        string addr = string(line);
+        for (int i = 0; i < (int)addr.size(); i++) {
+          if (addr[i] < 32 || addr[i] > 126) {
+            addr.erase(addr.begin() + i);
+            i--;
+          }
+        }
+
+#define CHECK_ADDR()                                                                                        \
+  for (int i = 0; i < (int)prefix.size(); i++) {                                                            \
+    if ((addr.compare(0, prefix[i].size(), prefix[i]) == 0)) {                                              \
+      if (found && (!privAddrFound || privAddr.compare(0, prefix[i].size(), prefix[i]) == 0)) {             \
+        printf("Warning: Multiple solutions found\n");                                                      \
+      }                                                                                                     \
+      privAddrFound = true;                                                                                 \
+      privAddr = addr;                                                                                      \
+      printf("Final PrivKey : %s\n", secp->GetPrivAddress(true, privKey).c_str());                          \
+      printf("         Addr : %s\n", secp->GetPrivAddress(true, secp->ComputePublicKey(&privKey)).c_str()); \
+      found = true;                                                                                         \
+    }                                                                                                       \
+  }
+
+        Int e;
+        e.Set(&privKey);
+        e.ModMulK1order(&lambda);
+        e.ModSubK1order(&secp->order);
+        CHECK_ADDR();
+
+        e.Set(&privKey);
+        e.ModMulK1order(&lambda2);
+        e.Neg();
+        e.Add(&secp->order);
+        CHECK_ADDR();
+
+        if (!found) {
+          printf("Unable to reconstruct final key from partialkey line %d\n Addr: %s\n PartKey: %s\n", i, addr.c_str(),
+                 partialPrivAddr.c_str());
+        }
+      }
+    }
   }
 
   printf("VanitySearch v" RELEASE "\n");
 
-  if(gridSize.size()==0) {
+#ifdef WITHGPU
+  if (gpuEnable && !gpuIdSpecified) {
+    vector<int> autoIds = GPUEngine::GetAutoGpuIds(8);
+    if (!autoIds.empty()) gpuId = autoIds;
+  }
+#endif
+
+  if (gridSize.size() == 0) {
     for (int i = 0; i < gpuId.size(); i++) {
-      gridSize.push_back(-1);
-      gridSize.push_back(128);
+      int gridX = -1;
+      int gridY = 128;
+#ifdef WITHGPU
+      if (gpuEnable) {
+        pair<int, int> autoGrid = GPUEngine::GetAutoGridSize(gpuId[i]);
+        gridX = autoGrid.first;
+        gridY = autoGrid.second;
+      }
+#endif
+      gridSize.push_back(gridX);
+      gridSize.push_back(gridY);
     }
-  } else if(gridSize.size() != gpuId.size()*2) {
+  } else if (gridSize.size() != gpuId.size() * 2) {
     printf("Invalid gridSize or gpuId argument, must have coherent size\n");
     exit(-1);
   }
 
   // Let one CPU core free per gpu is gpu is enabled
   // It will avoid to hang the system
-  if( !tSpecified && nbCPUThread>1 && gpuEnable)
-    nbCPUThread-=(int)gpuId.size();
-  if(nbCPUThread<0)
-    nbCPUThread = 0;
+  if (!tSpecified && nbCPUThread > 1 && gpuEnable) nbCPUThread -= (int)gpuId.size();
+  if (nbCPUThread < 0) nbCPUThread = 0;
 
   // If a starting public key is specified, force the search mode according to the key
   if (!startPuKey.isZero()) {
-    searchMode = (startPubKeyCompressed)?SEARCH_COMPRESSED:SEARCH_UNCOMPRESSED;
+    searchMode = (startPubKeyCompressed) ? SEARCH_COMPRESSED : SEARCH_UNCOMPRESSED;
   }
 
-  VanitySearch *v = new VanitySearch(secp, prefix, seed, searchMode, gpuEnable, stop, outputFile, sse,
-    maxFound, rekey, caseSensitive, startPuKey, paranoiacSeed);
-  v->Search(nbCPUThread,gpuId,gridSize);
+  VanitySearch *v = new VanitySearch(secp, prefix, seed, searchMode, gpuEnable, stop, outputFile, sse, maxFound, rekey,
+                                     caseSensitive, startPuKey, paranoiacSeed);
+  v->Search(nbCPUThread, gpuId, gridSize);
 
   return 0;
 }
