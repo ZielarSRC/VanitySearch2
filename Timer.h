@@ -13,20 +13,21 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 #ifndef TIMERH
 #define TIMERH
 
 #include <time.h>
+
+#include <cstdint>
 #include <string>
 #ifdef WIN64
 #include <windows.h>
 #endif
 
 class Timer {
-
-public:
+ public:
   static void Init();
   static double get_tick();
   static void printResult(char *unit, int nbTry, double t0, double t1);
@@ -43,7 +44,6 @@ public:
 #else
   static time_t tickStart;
 #endif
-
 };
 
-#endif // TIMERH
+#endif  // TIMERH
